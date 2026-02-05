@@ -1,0 +1,164 @@
+/* Custom styles for LaTeX Editor MVP */
+
+:root {
+    --latex-green: #008080;
+    --latex-dark: #1a1a2e;
+    --latex-gray: #16213e;
+}
+
+/* CodeMirror 5 Customization */
+.CodeMirror {
+    height: 100%;
+    font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* Error Hightlighting */
+.line-error {
+    background-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+.line-warning {
+    background-color: rgba(234, 179, 8, 0.2) !important;
+}
+
+/* PDF Canvas Styling */
+#pdfCanvas,
+#pdfPagesContainer canvas {
+    max-width: 100%;
+    border-radius: 8px;
+}
+
+#pdfPagesContainer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+    padding: 1rem;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1a1a2e;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #374151;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #4b5563;
+}
+
+/* Loading Animation */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Toast Notifications */
+.toast {
+    min-width: 300px;
+    padding: 16px;
+    border-radius: 8px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.toast-success {
+    background-color: #065f46;
+    border-left: 4px solid #10b981;
+}
+
+.toast-error {
+    background-color: #7f1d1d;
+    border-left: 4px solid #ef4444;
+}
+
+.toast-warning {
+    background-color: #78350f;
+    border-left: 4px solid #f59e0b;
+}
+
+.toast-info {
+    background-color: #1e3a8a;
+    border-left: 4px solid #3b82f6;
+}
+
+/* Files Panel */
+#filesPanel {
+    transition: transform 0.3s ease-in-out, width 0.3s ease-in-out;
+}
+
+#filesPanel.hidden {
+    transform: translateX(-100%);
+    width: 0;
+    overflow: hidden;
+}
+
+.file-item {
+    transition: all 0.2s ease;
+    border-left: 3px solid transparent;
+}
+
+.file-item:hover {
+    border-left-color: var(--latex-green);
+}
+
+.file-item.active {
+    border-left-color: var(--latex-green);
+    background-color: rgba(0, 128, 128, 0.1) !important;
+}
+
+.remove-file-btn {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.file-item:hover .remove-file-btn {
+    opacity: 1;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    main {
+        flex-direction: column;
+    }
+
+    main > div {
+        width: 100% !important;
+        height: 50%;
+    }
+
+    #filesPanel {
+        position: absolute;
+        z-index: 10;
+        height: 100%;
+    }
+}

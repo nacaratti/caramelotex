@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meus Projetos - LaTeX Editor</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Custom Styles (Reuse main.css) -->
+    <link rel="stylesheet" href="styles/main.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'latex-green': '#008080',
+                        'latex-dark': '#1a1a2e',
+                        'latex-gray': '#16213e',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-latex-dark border-b border-gray-700 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+            <h1 class="text-2xl font-bold text-latex-green">LaTeX Editor</h1>
+            <span class="text-sm text-gray-400">Meus Projetos</span>
+        </div>
+        <button id="logoutBtn"
+            class="text-gray-400 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-gray-800 flex items-center space-x-2"
+            title="Sair">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                </path>
+            </svg>
+            <span class="text-sm">Sair</span>
+        </button>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+
+        <div class="flex justify-between items-center mb-8">
+            <h2 class="text-xl font-semibold text-gray-200">Projetos Recentes</h2>
+            <div class="flex items-center space-x-3">
+                <a href="templates.html"
+                    class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path>
+                    </svg>
+                    <span>Templates</span>
+                </a>
+                <button id="newProjectBtn"
+                    class="bg-latex-green hover:bg-teal-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    <span>Novo Projeto</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading Skeleton -->
+        <div id="projectsLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="bg-gray-800 border border-gray-700 rounded-lg p-6 animate-pulse">
+                <div class="flex justify-between items-start mb-4"><div class="w-14 h-14 bg-gray-700 rounded-lg"></div></div>
+                <div class="h-5 bg-gray-700 rounded w-3/4 mb-2"></div>
+                <div class="h-4 bg-gray-700 rounded w-1/2 mb-4"></div>
+                <div class="h-9 bg-gray-700 rounded w-full"></div>
+            </div>
+            <div class="bg-gray-800 border border-gray-700 rounded-lg p-6 animate-pulse hidden md:block">
+                <div class="flex justify-between items-start mb-4"><div class="w-14 h-14 bg-gray-700 rounded-lg"></div></div>
+                <div class="h-5 bg-gray-700 rounded w-3/4 mb-2"></div>
+                <div class="h-4 bg-gray-700 rounded w-1/2 mb-4"></div>
+                <div class="h-9 bg-gray-700 rounded w-full"></div>
+            </div>
+            <div class="bg-gray-800 border border-gray-700 rounded-lg p-6 animate-pulse hidden lg:block">
+                <div class="flex justify-between items-start mb-4"><div class="w-14 h-14 bg-gray-700 rounded-lg"></div></div>
+                <div class="h-5 bg-gray-700 rounded w-3/4 mb-2"></div>
+                <div class="h-4 bg-gray-700 rounded w-1/2 mb-4"></div>
+                <div class="h-9 bg-gray-700 rounded w-full"></div>
+            </div>
+        </div>
+
+        <!-- Project Grid -->
+        <div id="projectsGrid" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Populated by JS -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="hidden text-center py-20">
+            <svg class="w-20 h-20 text-gray-700 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
+                </path>
+            </svg>
+            <p class="text-gray-500 text-lg">Nenhum projeto encontrado.</p>
+            <button id="emptyCreateBtn" class="mt-4 text-latex-green hover:underline">Criar meu primeiro
+                projeto</button>
+        </div>
+
+    </main>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/supabase.js?v=3"></script>
+    <script src="js/storage.js?v=3"></script>
+    <script>
+        function escapeHtml(str) {
+            if (typeof str !== 'string') return '';
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Auth guard
+            const session = await AuthService.requireAuth();
+            if (!session) return;
+
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', () => AuthService.signOut());
+
+            // New project buttons
+            document.getElementById('newProjectBtn').addEventListener('click', () => createNewProject());
+            document.getElementById('emptyCreateBtn').addEventListener('click', () => createNewProject());
+
+            await renderProjects();
+        });
+
+        async function renderProjects() {
+            const projects = await StorageService.listProjects();
+
+            // Hide skeleton
+            const skeleton = document.getElementById('projectsLoading');
+            if (skeleton) skeleton.classList.add('hidden');
+
+            const grid = document.getElementById('projectsGrid');
+            const emptyState = document.getElementById('emptyState');
+
+            grid.innerHTML = '';
+
+            if (projects.length === 0) {
+                grid.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            grid.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+
+            projects.forEach(project => {
+                const card = document.createElement('div');
+                card.className = 'bg-gray-800 border border-gray-700 rounded-lg p-6 hover:border-latex-green transition-all hover:shadow-lg group relative';
+
+                const date = new Date(project.lastModified).toLocaleDateString('pt-BR', {
+                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                });
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="p-3 bg-latex-gray rounded-lg">
+                            <svg class="w-8 h-8 text-latex-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                        </div>
+                        <div class="relative flex space-x-1">
+                            <button class="rename-btn text-gray-500 hover:text-blue-400 p-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Renomear">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                </svg>
+                            </button>
+                            <button class="delete-btn text-gray-500 hover:text-red-400 p-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Excluir">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <h3 class="text-lg font-bold text-gray-200 mb-1 truncate"></h3>
+                    <p class="text-sm text-gray-400 mb-4">Editado em ${escapeHtml(date)}</p>
+
+                    <button class="open-btn w-full bg-gray-700 hover:bg-gray-600 text-white py-2 rounded transition-colors text-sm font-medium">
+                        Abrir Editor
+                    </button>
+                `;
+
+                // Set project name safely via textContent (prevents XSS)
+                const h3 = card.querySelector('h3');
+                h3.textContent = project.name;
+                h3.title = project.name;
+
+                // Bind events via addEventListener (no inline onclick with user data)
+                card.querySelector('.rename-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    renameProjectUI(project.id, project.name);
+                });
+
+                card.querySelector('.delete-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    deleteProject(project.id);
+                });
+
+                card.querySelector('.open-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openProject(project.id);
+                });
+
+                // Make whole card clickable
+                card.addEventListener('click', (e) => {
+                    if (!e.target.closest('button')) {
+                        openProject(project.id);
+                    }
+                });
+
+                grid.appendChild(card);
+            });
+        }
+
+        async function createNewProject() {
+            const name = prompt('Nome do Projeto:', 'Novo Projeto');
+            if (!name) return;
+
+            const btn = document.getElementById('newProjectBtn');
+            btn.disabled = true;
+            btn.querySelector('span').textContent = 'Criando...';
+
+            try {
+                const id = await StorageService.createProject(name);
+                openProject(id);
+            } catch (e) {
+                console.error('Erro ao criar projeto:', e);
+                btn.disabled = false;
+                btn.querySelector('span').textContent = 'Novo Projeto';
+            }
+        }
+
+        function openProject(id) {
+            StorageService.setCurrentProjectId(id);
+            window.location.href = 'index.html';
+        }
+
+        async function deleteProject(id) {
+            if (!confirm('Tem certeza que deseja excluir este projeto?')) return;
+
+            document.querySelectorAll('.delete-btn').forEach(b => b.disabled = true);
+
+            await StorageService.deleteProject(id);
+            await renderProjects();
+        }
+
+        async function renameProjectUI(id, currentName) {
+            const newName = prompt('Novo nome do projeto:', currentName);
+            if (!newName || newName === currentName) return;
+
+            document.querySelectorAll('.rename-btn').forEach(b => b.disabled = true);
+
+            await StorageService.renameProject(id, newName);
+            await renderProjects();
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LaTeX Editor Online - MVP</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- CodeMirror 5 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/stex/stex.min.js"></script>
+
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+    <!-- JSZip for ZIP file handling -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="styles/main.css">
+    <style>
+        /* Custom Scrollbar for file list */
+        #fileList::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #fileList::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+
+        #fileList::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 3px;
+        }
+
+        #fileList::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+    </style>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'latex-green': '#008080',
+                        'latex-dark': '#1a1a2e',
+                        'latex-gray': '#16213e',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="bg-gray-900 text-gray-100 h-screen overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-latex-dark border-b border-gray-700 px-6 py-3 flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+            <!-- Toggle Files Panel Button -->
+            <button id="toggleFilesBtn" class="text-gray-400 hover:text-latex-green transition-colors duration-200"
+                title="Mostrar/Esconder Arquivos">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16">
+                    </path>
+                </svg>
+            </button>
+
+            <h1 class="text-2xl font-bold text-latex-green">LaTeX Editor</h1>
+            <a href="projects.html"
+                class="text-sm text-gray-400 hover:text-white hover:underline transition-colors flex items-center space-x-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                </svg>
+                <span>Meus Projetos</span>
+            </a>
+            <span class="text-sm text-gray-500">| MVP v1.0</span>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <!-- Compile Button -->
+            <button id="compileBtn"
+                class="bg-latex-green hover:bg-teal-600 text-white px-6 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+                    </path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span id="compileBtnText">Compilar</span>
+            </button>
+
+            <!-- Auto-compile Toggle -->
+            <label class="flex items-center space-x-2 cursor-pointer">
+                <input type="checkbox" id="autoCompile" class="sr-only peer">
+                <div
+                    class="relative w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-latex-green">
+                </div>
+                <span class="text-sm text-gray-300">Auto</span>
+            </label>
+
+            <!-- Download PDF -->
+            <button id="downloadBtn"
+                class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled>
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                    </path>
+                </svg>
+            </button>
+
+            <!-- Logout -->
+            <button id="logoutBtn"
+                class="text-gray-400 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-gray-800"
+                title="Sair">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                    </path>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex h-[calc(100vh-61px)]">
+
+        <!-- Files Panel (collapsible) -->
+        <aside id="filesPanel" class="w-64 bg-latex-gray border-r border-gray-700 flex flex-col hidden">
+            <!-- Panel Header -->
+            <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+                <span class="text-sm font-semibold text-gray-300">Arquivos do Projeto</span>
+                <div class="flex items-center space-x-2">
+                    <button id="addFolderBtn" class="text-gray-400 hover:text-latex-green transition-colors"
+                        title="Nova Pasta">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z">
+                            </path>
+                        </svg>
+                    </button>
+                    <button id="addFileBtn" class="text-gray-400 hover:text-latex-green transition-colors"
+                        title="Adicionar Arquivo">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4">
+                            </path>
+                        </svg>
+                    </button>
+                    <button id="uploadZipBtn" class="text-gray-400 hover:text-latex-green transition-colors"
+                        title="Importar projeto ZIP">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- File List -->
+            <div id="fileList" class="flex-1 overflow-auto p-2 space-y-1">
+                <!-- Content generated by JS -->
+            </div>
+
+
+            <!-- Upload Input (hidden) -->
+            <input type="file" id="fileUploadInput" class="hidden"
+                accept=".bib,.sty,.cls,.tex,.png,.jpg,.jpeg,.pdf,.eps" multiple>
+
+            <!-- ZIP Upload Input (hidden) -->
+            <input type="file" id="zipUploadInput" class="hidden" accept=".zip">
+        </aside>
+
+        <!-- Left Panel - Editor -->
+        <div id="editorPanel" class="w-1/2 border-r border-gray-700 flex flex-col min-w-[300px]">
+            <div class="bg-latex-gray px-4 py-2 border-b border-gray-700 flex items-center justify-between">
+                <span class="text-sm font-semibold text-gray-300">Editor LaTeX</span>
+                <div class="flex items-center space-x-2 text-xs text-gray-400">
+                    <span id="editorStatus">Pronto</span>
+                    <span>|</span>
+                    <span id="lineCount">Linhas: 1</span>
+                </div>
+            </div>
+
+            <div id="editor" class="flex-1 overflow-auto bg-gray-800"></div>
+        </div>
+
+        <!-- Resizer Handle -->
+        <div id="resizer"
+            class="w-1 bg-gray-700 hover:bg-latex-green cursor-col-resize transition-colors flex flex-col justify-center items-center z-10 relative group">
+            <!-- Visual indicator -->
+            <div class="h-8 w-1 bg-gray-500 rounded group-hover:bg-white transition-colors"></div>
+        </div>
+
+        <!-- Right Panel - PDF Viewer -->
+        <div id="viewerPanel" class="w-1/2 flex flex-col bg-gray-800 min-w-[300px]">
+            <div class="bg-latex-gray px-4 py-2 border-b border-gray-700 flex items-center justify-between">
+                <span class="text-sm font-semibold text-gray-300">Visualização PDF</span>
+                <div class="flex items-center space-x-3">
+                    <button id="toggleLogsBtn" class="text-gray-400 hover:text-white transition-colors"
+                        title="Ver Logs de Compilação">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </button>
+                    <span id="compileStatus" class="text-xs text-gray-400">Aguardando compilação...</span>
+                    <div id="loadingSpinner" class="hidden">
+                        <svg class="animate-spin h-5 w-5 text-latex-green" xmlns="http://www.w3.org/2000/svg"
+                            fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-auto p-4" id="pdfViewerContainer">
+                <div id="pdfPlaceholder" class="h-full flex items-center justify-center text-gray-500">
+                    <div class="text-center">
+                        <svg class="w-24 h-24 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                            </path>
+                        </svg>
+                        <p class="text-lg">Clique em "Compilar" para gerar o PDF</p>
+                    </div>
+                </div>
+                <div id="pdfPagesContainer" class="hidden space-y-4"></div>
+            </div>
+
+            <!-- Logs Container (Hidden by default) -->
+            <div id="logsContainer" class="hidden flex-1 overflow-auto p-4 bg-gray-900 font-mono text-sm">
+                <div id="logsContent" class="space-y-2">
+                    <p class="text-gray-500 text-center mt-10">Nenhum log disponível.</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="fixed bottom-4 right-4 space-y-2 z-50"></div>
+
+    <!-- Action Menu (Context/Dropdown) -->
+    <div id="actionMenu"
+        class="hidden fixed bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 py-1 min-w-[160px]">
+        <!-- Content injected by JS -->
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="editorLoadingOverlay" class="fixed inset-0 bg-gray-900 bg-opacity-90 flex items-center justify-center z-50">
+        <div class="text-center">
+            <svg class="animate-spin h-12 w-12 text-latex-green mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="text-gray-300 text-lg">Carregando projeto...</p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/supabase.js?v=3"></script>
+    <script src="js/storage.js?v=3"></script>
+    <script src="js/app.js?v=5"></script>
+</body>
+
+</html>
