@@ -1,1 +1,26 @@
+# Environment variables (contains secrets)
+.env
+.env.local
+.env.*.local
+
+# Generated config file (contains Supabase keys)
 js/config.js
+
+# Dependencies
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Build artifacts
+dist/
+build/
