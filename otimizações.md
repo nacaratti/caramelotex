@@ -1,5 +1,4 @@
----                                                                                                                                                                                                                         Visão Geral do Projeto                                                                                                                                                                                                    
-                                                                                                                                                                                                                              ✅ O que está funcionando bem:                                                                                                                                                                                            
+✅O que está funcionando bem:
 
   - Interface moderna com dark mode
   - Editor LaTeX com syntax highlighting
