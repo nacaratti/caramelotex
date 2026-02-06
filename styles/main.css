@@ -145,6 +145,75 @@
     opacity: 1;
 }
 
+/* AI Chat Panel */
+#aiChatPanel {
+    transition: height 0.3s ease-in-out;
+}
+
+#aiChatMessages {
+    scrollbar-width: thin;
+    scrollbar-color: #4b5563 #1f2937;
+}
+
+#aiChatMessages::-webkit-scrollbar {
+    width: 6px;
+}
+
+#aiChatMessages::-webkit-scrollbar-track {
+    background: #1f2937;
+}
+
+#aiChatMessages::-webkit-scrollbar-thumb {
+    background: #4b5563;
+    border-radius: 3px;
+}
+
+.ai-chat-message {
+    animation: fadeInUp 0.2s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.ai-code-block pre {
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.ai-code-block pre::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+
+.ai-code-block pre::-webkit-scrollbar-thumb {
+    background: #4b5563;
+    border-radius: 2px;
+}
+
+.ai-message-content {
+    word-break: break-word;
+}
+
+.ai-message-content code {
+    background-color: #1f2937;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+}
+
+/* PDF page wrapper for SyncTeX */
+.pdf-page-wrapper {
+    position: relative;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     main {

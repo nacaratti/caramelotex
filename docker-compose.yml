@@ -1,6 +1,8 @@
 services:
   latex-compiler:
-    image: yoant/latexonhttp-python:debian
+    build: ./latex-on-http-server
     ports:
       - "8080:8080"
     restart: unless-stopped
+    environment:
+      DEFAULT_COMPILE_TIMEOUT: 30

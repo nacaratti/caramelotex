@@ -21,6 +21,9 @@
     <!-- JSZip for ZIP file handling -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
+    <!-- Pako for gzip decompression (SyncTeX) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+
     <!-- Custom Styles -->
     <link rel="stylesheet" href="styles/main.css">
     <style>
@@ -191,7 +194,78 @@
                 </div>
             </div>
 
-            <div id="editor" class="flex-1 overflow-auto bg-gray-800"></div>
+            <div id="editor" class="flex-1 overflow-auto bg-gray-800 min-h-0"></div>
+
+            <!-- AI Chat Panel -->
+            <div id="aiChatPanel" class="bg-latex-gray border-t border-gray-700 flex flex-col transition-all duration-300" style="height: 40px;">
+                <!-- Chat Header -->
+                <div class="px-3 py-2 flex items-center justify-between cursor-pointer select-none" id="aiChatToggle">
+                    <div class="flex items-center space-x-2">
+                        <svg id="aiChatToggleIcon" class="w-4 h-4 text-gray-400 transition-transform duration-300" style="transform: rotate(180deg);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+                        </svg>
+                        <svg class="w-4 h-4 text-latex-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        <span class="text-sm font-medium text-gray-300">Assistente IA</span>
+                        <span id="aiProviderBadge" class="hidden text-xs px-1.5 py-0.5 bg-gray-700 rounded text-gray-400"></span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button id="aiConfigBtn" class="text-gray-400 hover:text-latex-green transition-colors p-1" title="Configurar IA">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                        </button>
+                        <button id="aiChatClear" class="text-gray-400 hover:text-yellow-400 transition-colors p-1" title="Limpar conversa">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Chat Content (collapsible) -->
+                <div id="aiChatContent" class="hidden flex-1 flex flex-col min-h-0">
+                    <!-- Unconfigured State -->
+                    <div id="aiChatUnconfigured" class="flex-1 flex items-center justify-center p-4">
+                        <div class="text-center">
+                            <svg class="w-10 h-10 text-gray-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                            </svg>
+                            <p class="text-gray-500 text-sm mb-2">Configure sua chave de API</p>
+                            <button id="aiConfigBtnEmpty" class="text-xs px-3 py-1.5 bg-latex-green hover:bg-teal-600 rounded text-white transition-colors">
+                                Configurar IA
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Configured State -->
+                    <div id="aiChatConfigured" class="hidden flex-1 flex flex-col min-h-0">
+                        <!-- Messages -->
+                        <div id="aiChatMessages" class="flex-1 overflow-auto p-2 space-y-2 min-h-0">
+                            <div class="text-center text-gray-500 text-xs py-4">
+                                Pergunte sobre LaTeX, peca sugestoes ou ajuda com erros.
+                            </div>
+                        </div>
+
+                        <!-- Input -->
+                        <div class="p-2 border-t border-gray-700">
+                            <div class="flex items-center space-x-2">
+                                <input type="text" id="aiChatInput"
+                                    class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-latex-green"
+                                    placeholder="Digite sua pergunta...">
+                                <button id="aiChatSend"
+                                    class="bg-latex-green hover:bg-teal-600 text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Resizer Handle -->
@@ -252,6 +326,54 @@
 
     </main>
 
+    <!-- AI Config Modal -->
+    <div id="aiConfigModal" class="fixed inset-0 bg-black bg-opacity-75 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-xl max-w-md w-full overflow-hidden">
+            <div class="flex justify-between items-center p-4 border-b border-gray-700">
+                <h3 class="text-lg font-bold text-gray-200">Configurar Assistente IA</h3>
+                <button id="closeAiConfigModal" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-700">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="p-4 space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-300 mb-1">Provedor de IA</label>
+                    <select id="aiProvider" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-gray-200 focus:outline-none focus:border-latex-green">
+                        <option value="openai">OpenAI (GPT-4o mini)</option>
+                        <option value="gemini">Google Gemini (1.5 Flash)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm text-gray-300 mb-1">Chave de API</label>
+                    <input type="password" id="aiApiKey"
+                        class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-gray-200 placeholder-gray-500 focus:outline-none focus:border-latex-green"
+                        placeholder="sk-... ou AIza...">
+                    <p class="text-xs text-gray-500 mt-1">Sua chave fica salva apenas no seu navegador.</p>
+                </div>
+
+                <div id="aiConfigTestStatus" class="text-sm"></div>
+            </div>
+
+            <div class="p-4 border-t border-gray-700 flex justify-between">
+                <button id="clearAiConfig" class="px-3 py-2 text-red-400 hover:text-red-300 text-sm transition-colors">
+                    Remover Chave
+                </button>
+                <div class="flex gap-2">
+                    <button id="testAiConfig" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-300 transition-colors">
+                        Testar
+                    </button>
+                    <button id="saveAiConfig" class="px-4 py-2 bg-latex-green hover:bg-teal-600 rounded-lg text-sm text-white transition-colors">
+                        Salvar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notifications -->
     <div id="toastContainer" class="fixed bottom-4 right-4 space-y-2 z-50"></div>
 
@@ -277,7 +399,15 @@
     <script src="js/config.js"></script>
     <script src="js/supabase.js?v=3"></script>
     <script src="js/storage.js?v=3"></script>
-    <script src="js/app.js?v=5"></script>
+    <script src="js/synctex-parser.js?v=1"></script>
+    <script src="js/app.js?v=6"></script>
+    <script src="js/ai-assistant.js?v=1"></script>
+    <script src="js/ai-chat.js?v=1"></script>
+
+    <script>
+        // Bind do botao de config vazio
+        document.getElementById('aiConfigBtnEmpty')?.addEventListener('click', () => AIChat.openConfigModal());
+    </script>
 </body>
 
 </html>

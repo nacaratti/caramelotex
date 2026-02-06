@@ -10,7 +10,10 @@
       "Bash(docker-compose up:*)",
       "Bash(docker ps:*)",
       "Bash(curl:*)",
-      "Bash(docker logs:*)"
+      "Bash(docker logs:*)",
+      "WebSearch",
+      "WebFetch(domain:durieux.me)",
+      "WebFetch(domain:man.archlinux.org)"
     ]
   }
 }

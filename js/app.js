@@ -18,6 +18,7 @@ let editor;
 let compiler;
 let viewer;
 let currentPdfData = null;
+let currentSynctexData = null; // Dados SyncTeX parseados para sincronização
 let autoCompileEnabled = false;
 let debounceTimer = null;
 
@@ -305,6 +306,16 @@ function initEditor() {
         }
     });
 
+    // Forward sync: duplo clique no editor -> vai para posição no PDF
+    editor.on('dblclick', function (cm) {
+        if (!currentSynctexData) return;
+
+        setTimeout(() => {
+            const cursor = cm.getCursor();
+            forwardSyncToPdf(cursor.line + 1); // SyncTeX usa 1-indexed
+        }, 50);
+    });
+
     updateLineCount();
     console.log('✅ Editor inicializado');
 }
@@ -477,10 +488,64 @@ async function compile() {
 
         const contentType = response.headers.get('content-type') || '';
 
-        if (response.ok && contentType.includes('pdf')) {
+        // Servidor local retorna JSON com PDF + SyncTeX em base64
+        if (response.ok && contentType.includes('json')) {
+            const data = await response.json();
+
+            if (data.pdf) {
+                // Decodifica PDF de base64
+                const pdfBytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
+                currentPdfData = pdfBytes;
+
+                // Decodifica e parseia SyncTeX se disponível
+                if (data.synctex && typeof pako !== 'undefined' && typeof SyncTexParser !== 'undefined') {
+                    try {
+                        const synctexGz = Uint8Array.from(atob(data.synctex), c => c.charCodeAt(0));
+                        const synctexText = pako.inflate(synctexGz, { to: 'string' });
+                        currentSynctexData = SyncTexParser.parse(synctexText);
+                        console.log('✅ SyncTeX carregado:', Object.keys(currentSynctexData.blockNumberLine));
+                    } catch (syncErr) {
+                        console.warn('⚠️ Erro ao parsear SyncTeX:', syncErr);
+                        currentSynctexData = null;
+                    }
+                } else {
+                    currentSynctexData = null;
+                }
+
+                compileStatus.textContent = 'PDF gerado com sucesso! (100%)';
+
+                await loadPDF(pdfBytes);
+                document.getElementById('downloadBtn').disabled = false;
+
+                // Detecta warnings no código-fonte
+                var sourceWarnings = detectSourceWarnings(projectFiles);
+                if (sourceWarnings.length > 0) {
+                    renderErrorLog(sourceWarnings);
+                    showToast('PDF gerado com ' + sourceWarnings.length + ' aviso(s)', 'warning');
+                    var toggleBtn = document.getElementById('toggleLogsBtn');
+                    toggleBtn.classList.add('text-yellow-400');
+                    toggleBtn.title = sourceWarnings.length + ' aviso(s) detectado(s)';
+                } else {
+                    const syncStatus = currentSynctexData ? ' (SyncTeX ativo)' : '';
+                    showToast('Compilação concluída!' + syncStatus, 'success');
+                    var toggleBtn = document.getElementById('toggleLogsBtn');
+                    toggleBtn.classList.remove('text-yellow-400', 'text-red-400');
+                    toggleBtn.title = 'Ver Logs';
+                }
+
+                // Switch to PDF view on success
+                switchViewerMode('pdf');
+            } else {
+                // JSON de erro
+                throw new Error(data.error || data.logs || JSON.stringify(data));
+            }
+        }
+        // Fallback: API pública retorna PDF diretamente
+        else if (response.ok && contentType.includes('pdf')) {
             const pdfData = await response.arrayBuffer();
             const pdfArray = new Uint8Array(pdfData);
             currentPdfData = new Uint8Array(pdfArray);
+            currentSynctexData = null; // API pública não retorna SyncTeX
 
             compileStatus.textContent = 'PDF gerado com sucesso! (100%)';
 
@@ -497,7 +562,7 @@ async function compile() {
                 toggleBtn.classList.add('text-yellow-400');
                 toggleBtn.title = sourceWarnings.length + ' aviso(s) detectado(s)';
             } else {
-                showToast('Compilação concluída!', 'success');
+                showToast('Compilação concluída! (sem SyncTeX)', 'success');
                 var toggleBtn = document.getElementById('toggleLogsBtn');
                 toggleBtn.classList.remove('text-yellow-400', 'text-red-400');
                 toggleBtn.title = 'Ver Logs';
@@ -937,6 +1002,9 @@ async function loadPDF(pdfData) {
             await renderPage(pageNum, pagesContainer);
         }
 
+        // Configura reverse sync (Ctrl+click no PDF)
+        setupReverseSyncHandler();
+
         showToast(`PDF carregado: ${pdfDoc.numPages} página(s)`, 'success');
     } catch (error) {
         console.error('❌ Erro ao carregar PDF:', error);
@@ -951,18 +1019,15 @@ async function renderPage(pageNum, container) {
 
         const canvas = document.createElement('canvas');
         canvas.className = 'mx-auto shadow-2xl rounded-lg';
+        canvas.dataset.pageNum = pageNum;
         const context = canvas.getContext('2d');
         canvas.height = viewport.height;
         canvas.width = viewport.width;
 
         const pageWrapper = document.createElement('div');
-        pageWrapper.className = 'relative';
+        pageWrapper.className = 'relative pdf-page-wrapper';
+        pageWrapper.dataset.pageNum = pageNum;
 
-        const pageLabel = document.createElement('div');
-        pageLabel.className = 'text-center text-sm text-gray-400 mb-2';
-        pageLabel.textContent = `Página ${pageNum} de ${pdfDoc.numPages}`;
-
-        pageWrapper.appendChild(pageLabel);
         pageWrapper.appendChild(canvas);
         container.appendChild(pageWrapper);
 
@@ -976,6 +1041,154 @@ async function renderPage(pageNum, container) {
     } catch (error) {
         console.error(`❌ Erro ao renderizar página ${pageNum}:`, error);
     }
+}
+
+// ========== SYNCTEX SYNC ==========
+
+/**
+ * Forward sync: vai da linha do editor para a posição correspondente no PDF
+ * @param {number} lineNumber - Número da linha (1-indexed)
+ */
+function forwardSyncToPdf(lineNumber) {
+    if (!currentSynctexData || !pdfDoc) {
+        console.log('SyncTeX não disponível');
+        return;
+    }
+
+    const fileName = currentFile || 'main.tex';
+    const blocks = SyncTexParser.forwardSync(currentSynctexData, fileName, lineNumber);
+
+    if (!blocks || blocks.length === 0) {
+        return;
+    }
+
+    // Usa o primeiro bloco encontrado
+    const block = blocks[0];
+    const pageNum = block.page || 1;
+
+    // Encontra o canvas da página
+    const pagesContainer = document.getElementById('pdfPagesContainer');
+    const pageWrapper = pagesContainer.querySelector(`[data-page-num="${pageNum}"]`);
+
+    if (!pageWrapper) {
+        console.log(`Página ${pageNum} não encontrada`);
+        return;
+    }
+
+    const canvas = pageWrapper.querySelector('canvas');
+    if (!canvas) return;
+
+    // Converte coordenadas SyncTeX para canvas
+    const coords = SyncTexParser.synctexToCanvas(currentSynctexData, block, canvas.height, scale);
+
+    // Scroll para a posição
+    const container = document.getElementById('pdfViewerContainer');
+    const scrollY = pageWrapper.offsetTop + coords.y - container.clientHeight / 3;
+
+    container.scrollTo({
+        top: Math.max(0, scrollY),
+        behavior: 'smooth'
+    });
+
+    // Garante que estamos vendo o PDF
+    switchViewerMode('pdf');
+}
+
+/**
+ * Reverse sync: vai da posição no PDF para a linha correspondente no editor
+ * @param {number} pageNum - Número da página
+ * @param {number} canvasX - Coordenada X no canvas
+ * @param {number} canvasY - Coordenada Y no canvas
+ * @param {HTMLCanvasElement} canvas - Elemento canvas
+ */
+function reverseSyncToEditor(pageNum, canvasX, canvasY, canvas) {
+    if (!currentSynctexData) {
+        showToast('SyncTeX não disponível', 'warning');
+        return;
+    }
+
+    // Converte coordenadas do canvas para SyncTeX
+    const synctexCoords = SyncTexParser.canvasToSynctex(
+        currentSynctexData,
+        canvasX,
+        canvasY,
+        canvas.height,
+        scale
+    );
+
+    // Busca a linha correspondente
+    const result = SyncTexParser.reverseSync(
+        currentSynctexData,
+        pageNum,
+        synctexCoords.x,
+        synctexCoords.y
+    );
+
+    if (!result) {
+        showToast('Posição não mapeada', 'info');
+        return;
+    }
+
+    // Se o arquivo é diferente do atual, troca
+    if (result.file !== currentFile && projectFiles[result.file]) {
+        selectFile(result.file);
+    }
+
+    // Vai para a linha no editor
+    goToLine(result.line);
+
+    console.log(`🔗 Reverse sync: página ${pageNum} (${Math.round(canvasX)}, ${Math.round(canvasY)}) → ${result.file}:${result.line}`);
+}
+
+/**
+ * Configura o handler de reverse sync (Ctrl+click no PDF)
+ */
+function setupReverseSyncHandler() {
+    const pdfContainer = document.getElementById('pdfViewerContainer');
+
+    // Ctrl+click para reverse sync
+    pdfContainer.addEventListener('click', function(event) {
+        if (!event.ctrlKey) return;
+        if (!currentSynctexData) {
+            showToast('SyncTeX não disponível - compile com servidor local', 'warning');
+            return;
+        }
+
+        // Encontra qual página foi clicada
+        const pageWrapper = event.target.closest('.pdf-page-wrapper');
+        if (!pageWrapper) return;
+
+        const canvas = pageWrapper.querySelector('canvas');
+        if (!canvas) return;
+
+        const pageNum = parseInt(pageWrapper.dataset.pageNum);
+
+        // Calcula posição do clique no canvas
+        const rect = canvas.getBoundingClientRect();
+        const canvasX = (event.clientX - rect.left) * (canvas.width / rect.width);
+        const canvasY = (event.clientY - rect.top) * (canvas.height / rect.height);
+
+        reverseSyncToEditor(pageNum, canvasX, canvasY, canvas);
+    });
+
+    // Muda cursor quando Ctrl pressionado sobre o PDF
+    pdfContainer.addEventListener('mousemove', function(event) {
+        const isOverCanvas = event.target.tagName === 'CANVAS' ||
+                            event.target.closest('.pdf-page-wrapper');
+
+        if (event.ctrlKey && currentSynctexData && isOverCanvas) {
+            pdfContainer.style.cursor = 'crosshair';
+        } else {
+            pdfContainer.style.cursor = 'default';
+        }
+    });
+
+    // Remove cursor especial quando Ctrl solta
+    document.addEventListener('keyup', function(event) {
+        if (event.key === 'Control') {
+            pdfContainer.style.cursor = 'default';
+        }
+    });
 }
 
 // ========== EVENT LISTENERS ==========
