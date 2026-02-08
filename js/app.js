@@ -333,12 +333,12 @@ function getEditorContent() {
 }
 
 // ========== COMPILER ==========
-// Prioridade: 1) LATEX_API_URL (Railway/produção), 2) localhost, 3) API pública
+// Prioridade: 1) LATEX_API_URL (produção/Render), 2) localhost, 3) API pública
 const API_URL_CONFIGURED = (typeof LATEX_API_URL !== 'undefined' && LATEX_API_URL) ? LATEX_API_URL : null;
 const API_URL_LOCAL = 'http://localhost:8080';
 const API_URL_PUBLIC = 'https://latex.ytotech.com';
 
-// Se temos URL configurada (Railway), usa ela; senão tenta localhost
+// Se temos URL configurada (Render), usa ela; senão tenta localhost
 const API_URL_PRIMARY = API_URL_CONFIGURED || API_URL_LOCAL;
 let isCompiling = false;
 let compileAbortController = null;
@@ -465,7 +465,7 @@ async function compile() {
         let usedServer = API_URL_PRIMARY;
 
         try {
-            const serverType = API_URL_CONFIGURED ? 'Railway' : 'local';
+            const serverType = API_URL_CONFIGURED ? 'remoto' : 'local';
             console.log(`🖥️ Tentando servidor ${serverType}: ${API_URL_PRIMARY}`);
             response = await fetch(API_URL_PRIMARY + '/builds/sync', {
                 method: 'POST',
