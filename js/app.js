@@ -333,11 +333,13 @@ function getEditorContent() {
 }
 
 // ========== COMPILER ==========
-// Usa servidor Docker local (porta 8080) para melhor suporte a bibtex
-// Fallback para API pública se local não estiver disponível
+// Prioridade: 1) LATEX_API_URL (Railway/produção), 2) localhost, 3) API pública
+const API_URL_CONFIGURED = (typeof LATEX_API_URL !== 'undefined' && LATEX_API_URL) ? LATEX_API_URL : null;
 const API_URL_LOCAL = 'http://localhost:8080';
 const API_URL_PUBLIC = 'https://latex.ytotech.com';
-let API_URL = API_URL_LOCAL; // Padrão: servidor local
+
+// Se temos URL configurada (Railway), usa ela; senão tenta localhost
+const API_URL_PRIMARY = API_URL_CONFIGURED || API_URL_LOCAL;
 let isCompiling = false;
 let compileAbortController = null;
 
@@ -458,21 +460,23 @@ async function compile() {
 
         compileStatus.textContent = 'Compilando LaTeX... (60%)';
 
-        // Tenta servidor local primeiro, fallback para público
+        // Tenta servidor primário (Railway ou localhost), fallback para API pública
         let response;
-        let usedServer = API_URL_LOCAL;
+        let usedServer = API_URL_PRIMARY;
 
         try {
-            console.log(`🖥️ Tentando servidor local: ${API_URL_LOCAL}`);
-            response = await fetch(API_URL_LOCAL + '/builds/sync', {
+            const serverType = API_URL_CONFIGURED ? 'Railway' : 'local';
+            console.log(`🖥️ Tentando servidor ${serverType}: ${API_URL_PRIMARY}`);
+            response = await fetch(API_URL_PRIMARY + '/builds/sync', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
                 signal: compileAbortController.signal
             });
-        } catch (localError) {
-            // Servidor local não disponível, usa API pública
-            console.log(`⚠️ Servidor local indisponível, usando API pública: ${API_URL_PUBLIC}`);
+        } catch (primaryError) {
+            // Servidor primário não disponível, usa API pública (sem SyncTeX)
+            console.log(`⚠️ Servidor primário indisponível, usando API pública: ${API_URL_PUBLIC}`);
+            console.log(`⚠️ Nota: API pública não suporta SyncTeX`);
             usedServer = API_URL_PUBLIC;
             response = await fetch(API_URL_PUBLIC + '/builds/sync', {
                 method: 'POST',
