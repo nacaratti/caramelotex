@@ -1,4 +1,4 @@
-# LaTeX-On-HTTP Docker container for Railway deployment.
+# LaTeX-On-HTTP Docker container for Render deployment.
 # Simplified version without PostgreSQL dependencies.
 
 FROM yoant/latexonhttp-python:debian
@@ -19,13 +19,11 @@ COPY ./latexonhttp/ /app/latex-on-http/latexonhttp/
 # Install app dependencies.
 RUN make install
 
-# Copy entrypoint
-COPY ./tools/entrypoint-railway.sh ./tools/
-
 EXPOSE 8080
 
 # Health check endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-ENTRYPOINT ["/bin/bash", "tools/entrypoint-railway.sh"]
+# Start server
+CMD ["make", "start"]
