@@ -1,0 +1,5 @@
+Fontes Latin Modern (lmroman10, lmroman17, lmmono10)
+Copyright (c) GUST e-foundry. Distribuídas sob a GUST Font License:
+http://www.gust.org.pl/projects/e-foundry/licenses
+
+Copiadas sem alteração da distribuição TeX Live (pacote "lm").

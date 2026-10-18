@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CarameloTeX — editor LaTeX offline para Windows</title>
+    <meta name="description"
+        content="Editor LaTeX para Windows que já vem com o compilador. Abra a pasta do seu trabalho e gere o PDF no seu computador, sem internet.">
+    <link rel="icon" type="image/png" href="img/favicon.png">
+
+    <style>
+        @font-face {
+            font-family: 'Latin Modern Roman';
+            src: url('fonts/lmroman10-regular.otf') format('opentype');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Latin Modern Roman';
+            src: url('fonts/lmroman10-italic.otf') format('opentype');
+            font-weight: 400;
+            font-style: italic;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Latin Modern Roman';
+            src: url('fonts/lmroman10-bold.otf') format('opentype');
+            font-weight: 700;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        /* Corpo 17pt: desenho próprio para tamanhos grandes (títulos) */
+        @font-face {
+            font-family: 'Latin Modern Display';
+            src: url('fonts/lmroman17-regular.otf') format('opentype');
+            font-weight: 400;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Latin Modern Mono';
+            src: url('fonts/lmmono10-regular.otf') format('opentype');
+            font-weight: 400;
+            font-display: swap;
+        }
+
+        :root {
+            /* Cores do mascote */
+            --caramelo: #cd8d45;
+            --caramelo-claro: #f6e3cb;
+            --contorno: #4a2c17;
+            --tinta: #2a1a0e;
+            --papel: #ffffff;
+            --verde: #0e7a73;
+            --verde-escuro: #0a5c56;
+
+            --serif: 'Latin Modern Roman', 'Latin Modern', 'CMU Serif', Georgia, serif;
+            --display: 'Latin Modern Display', var(--serif);
+            --mono: 'Latin Modern Mono', Consolas, monospace;
+
+            /* Escala tipográfica (razão 1,25) */
+            --t-sm: 0.875rem;
+            --t-base: 1.1875rem;
+            --t-lg: 1.5rem;
+            --t-xl: 2rem;
+            --t-2xl: 2.75rem;
+            --t-3xl: clamp(2.5rem, 6vw, 4.25rem);
+
+            --gutter: clamp(1rem, 4vw, 2.5rem);
+            --max: 72rem;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
+
+        html {
+            -webkit-text-size-adjust: 100%;
+        }
+
+        body {
+            margin: 0;
+            background: var(--papel);
+            color: var(--tinta);
+            font-family: var(--serif);
+            font-size: var(--t-base);
+            line-height: 1.55;
+            font-kerning: normal;
+            text-rendering: optimizeLegibility;
+        }
+
+        img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        a {
+            color: var(--verde-escuro);
+            text-underline-offset: 0.18em;
+        }
+
+        a:hover {
+            color: var(--verde);
+        }
+
+        :focus-visible {
+            outline: 3px solid var(--verde);
+            outline-offset: 3px;
+        }
+
+        .wrap {
+            max-width: var(--max);
+            margin: 0 auto;
+            padding: 0 var(--gutter);
+        }
+
+        /* ---------- Botões ---------- */
+        .button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6em;
+            padding: 0.7em 1.3em;
+            font-family: var(--serif);
+            font-weight: 700;
+            font-size: 1.125rem;
+            text-decoration: none;
+            color: var(--papel);
+            background: var(--contorno);
+            border: 3px solid var(--contorno);
+            border-radius: 999px;
+            box-shadow: 0 4px 0 var(--tinta);
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+        }
+
+        .button:hover {
+            color: var(--papel);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 0 var(--tinta);
+        }
+
+        .button:active {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 var(--tinta);
+        }
+
+        .button svg {
+            width: 1.2em;
+            height: 1.2em;
+            flex-shrink: 0;
+        }
+
+        /* ---------- Cabeçalho ---------- */
+        .site-header {
+            background: var(--caramelo-claro);
+        }
+
+        .site-header .wrap {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            color: var(--tinta);
+            text-decoration: none;
+            font-size: var(--t-lg);
+            font-weight: 700;
+        }
+
+        .brand img {
+            height: 2.6rem;
+            width: auto;
+        }
+
+        .site-header nav {
+            display: flex;
+            gap: 1.4rem;
+            font-size: 1.0625rem;
+        }
+
+        .site-header nav a {
+            color: var(--tinta);
+            text-decoration: none;
+        }
+
+        .site-header nav a:hover {
+            text-decoration: underline;
+        }
+
+        /* ---------- Hero ---------- */
+        .hero {
+            background: var(--caramelo-claro);
+            padding: 2.5rem 0 0;
+            overflow: hidden;
+        }
+
+        .hero-text {
+            max-width: 60rem;
+        }
+
+        .hero h1 {
+            font-family: var(--display);
+            font-weight: 400;
+            font-size: var(--t-3xl);
+            line-height: 1.05;
+            letter-spacing: -0.01em;
+            text-wrap: balance;
+            margin: 0 0 1.25rem;
+            color: var(--tinta);
+        }
+
+        .hero .lead {
+            font-size: 1.3125rem;
+            line-height: 1.5;
+            max-width: 38rem;
+            margin: 0 0 2rem;
+        }
+
+        .hero-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 1rem 1.6rem;
+        }
+
+        .hero-actions .note {
+            font-size: var(--t-sm);
+            font-style: italic;
+            line-height: 1.4;
+        }
+
+        /* Janela do app (ilustração) */
+        .stage {
+            position: relative;
+            margin-top: 3.5rem;
+        }
+
+        /* Cachorro correndo em cima da janela (imagem 561x359) */
+        .stage .dog {
+            position: absolute;
+            right: 4%;
+            top: -7.6rem;
+            width: 12.5rem;
+            z-index: 2;
+        }
+
+        .app {
+            position: relative;
+            background: #1f2937;
+            border: 3px solid var(--contorno);
+            border-bottom: 0;
+            border-radius: 14px 14px 0 0;
+            box-shadow: 0 -2px 0 rgba(255, 255, 255, 0.15) inset;
+            overflow: hidden;
+        }
+
+        .app-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            padding: 0.6rem 1rem;
+            background: #1a1a2e;
+            color: #cbd5e1;
+            font-family: system-ui, sans-serif;
+            font-size: 0.8125rem;
+        }
+
+        .app-bar .name {
+            color: #2dd4bf;
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+
+        .app-bar .spacer {
+            flex: 1;
+        }
+
+        .app-bar .compile {
+            background: #008080;
+            color: #fff;
+            border-radius: 6px;
+            padding: 0.3rem 0.8rem;
+            font-weight: 600;
+        }
+
+        .app-panes {
+            display: grid;
+            grid-template-columns: 11rem 1fr 1fr;
+            min-height: 25rem;
+        }
+
+        .pane-files {
+            background: #16213e;
+            color: #cbd5e1;
+            font-family: system-ui, sans-serif;
+            font-size: 0.8125rem;
+            padding: 0.9rem 0.8rem;
+            line-height: 2;
+        }
+
+        .pane-files .folder {
+            color: #facc15;
+        }
+
+        .pane-files .active {
+            background: #1f2937;
+            border-radius: 4px;
+            padding: 0 0.4rem;
+            margin: 0 -0.4rem;
+        }
+
+        .pane-files .indent {
+            padding-left: 1rem;
+        }
+
+        .pane-code {
+            background: #282a36;
+            color: #f8f8f2;
+            font-family: var(--mono);
+            font-size: 0.875rem;
+            line-height: 1.75;
+            padding: 0.9rem 0;
+            overflow: hidden;
+            white-space: pre;
+        }
+
+        .pane-code .ln {
+            display: inline-block;
+            width: 2.6rem;
+            padding-right: 0.8rem;
+            text-align: right;
+            color: #6272a4;
+        }
+
+        .pane-code .hl {
+            display: block;
+            background: rgba(45, 212, 191, 0.14);
+        }
+
+        .tok-cmd {
+            color: #ff79c6;
+        }
+
+        .tok-arg {
+            color: #f1fa8c;
+        }
+
+        .tok-com {
+            color: #6272a4;
+        }
+
+        .pane-pdf {
+            background: #525659;
+            display: flex;
+            justify-content: center;
+            padding: 1.4rem 1.2rem 0;
+            overflow: hidden;
+        }
+
+        /* Página tipografada */
+        .page {
+            width: 100%;
+            max-width: 26rem;
+            background: var(--papel);
+            color: #000;
+            padding: 2.2rem 2.4rem;
+            font-family: var(--serif);
+            font-size: 0.8125rem;
+            line-height: 1.5;
+            text-align: justify;
+            hyphens: auto;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+        }
+
+        .page .title {
+            font-size: 1.35rem;
+            text-align: center;
+            margin: 0 0 0.4rem;
+            line-height: 1.25;
+        }
+
+        .page .author,
+        .page .date {
+            text-align: center;
+            margin: 0;
+        }
+
+        .page .date {
+            margin-bottom: 1.4rem;
+        }
+
+        .page h4 {
+            font-size: 0.95rem;
+            margin: 1.2rem 0 0.4rem;
+        }
+
+        .page h4 span {
+            margin-right: 0.8em;
+        }
+
+        .page p {
+            margin: 0;
+            text-indent: 1.5em;
+        }
+
+        .page .eq {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            margin: 0.7rem 0;
+            font-style: italic;
+            font-size: 0.95rem;
+        }
+
+        .page sub,
+        .page sup {
+            font-size: 0.7em;
+            line-height: 0;
+        }
+
+        .page .eq .n {
+            position: absolute;
+            right: 0;
+            font-style: normal;
+        }
+
+        .page .synced {
+            background: rgba(45, 212, 191, 0.25);
+            box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.25);
+        }
+
+        /* Única animação: o documento "compila" ao carregar */
+        @media (prefers-reduced-motion: no-preference) {
+            .app-bar .compile {
+                animation: compile-pulse 0.9s ease-in-out 0.3s 2 both;
+            }
+
+            .page>* {
+                animation: typeset 0.5s ease-out both;
+                animation-delay: calc(1.8s + var(--i, 0) * 0.09s);
+            }
+
+            @keyframes compile-pulse {
+                50% {
+                    background: #2dd4bf;
+                    color: #134e4a;
+                }
+            }
+
+            @keyframes typeset {
+                from {
+                    opacity: 0;
+                    filter: blur(3px);
+                }
+
+                to {
+                    opacity: 1;
+                    filter: none;
+                }
+            }
+        }
+
+        /* ---------- Seções ---------- */
+        section {
+            padding: clamp(3.5rem, 8vw, 6rem) 0;
+        }
+
+        section h2 {
+            font-family: var(--display);
+            font-weight: 400;
+            font-size: var(--t-2xl);
+            line-height: 1.1;
+            margin: 0 0 0.8rem;
+        }
+
+        .section-intro {
+            max-width: 40rem;
+            margin: 0 0 2.75rem;
+            font-size: 1.25rem;
+        }
+
+        /* Como instalar: sequência real, então numerada */
+        .install {
+            background: var(--caramelo);
+            border-top: 3px solid var(--contorno);
+        }
+
+        .install a:not(.button) {
+            color: var(--tinta);
+        }
+
+        .install code {
+            font-family: var(--mono);
+            font-size: 0.95em;
+        }
+
+        .steps {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 2rem;
+            counter-reset: passo;
+        }
+
+        .steps li {
+            counter-increment: passo;
+        }
+
+        .steps li::before {
+            content: counter(passo);
+            display: grid;
+            place-items: center;
+            width: 2.6rem;
+            height: 2.6rem;
+            margin-bottom: 0.9rem;
+            border: 3px solid var(--contorno);
+            border-radius: 50%;
+            background: var(--papel);
+            font-weight: 700;
+            font-size: 1.2rem;
+        }
+
+        .steps h3 {
+            font-size: var(--t-lg);
+            line-height: 1.2;
+            margin: 0 0 0.5rem;
+        }
+
+        .steps p {
+            margin: 0;
+            font-size: 1.0625rem;
+        }
+
+        .install-footer {
+            margin-top: 3rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 1rem 2rem;
+        }
+
+        .requirements {
+            margin: 0;
+            font-size: 1.0625rem;
+        }
+
+        /* Funcionalidades */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 3rem 4rem;
+        }
+
+        .feature h3 {
+            font-size: var(--t-lg);
+            line-height: 1.25;
+            margin: 0 0 0.5rem;
+        }
+
+        .feature p {
+            margin: 0;
+            max-width: 34rem;
+        }
+
+        .feature code,
+        .faq code {
+            font-family: var(--mono);
+            font-size: 0.95em;
+            background: var(--caramelo-claro);
+            padding: 0.05em 0.3em;
+            border-radius: 3px;
+        }
+
+        .feature-wide {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 2rem 4rem;
+            align-items: center;
+            padding-bottom: 3rem;
+            border-bottom: 2px solid var(--caramelo-claro);
+        }
+
+        .templates-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+        }
+
+        .templates-list li {
+            border: 2px solid var(--contorno);
+            border-radius: 999px;
+            padding: 0.25rem 0.9rem;
+            font-size: 1rem;
+            background: var(--papel);
+        }
+
+        /* Perguntas */
+        .faq {
+            background: var(--caramelo-claro);
+        }
+
+        .faq dl {
+            margin: 2.5rem 0 0;
+            max-width: 46rem;
+        }
+
+        .faq dt {
+            font-weight: 700;
+            font-size: 1.25rem;
+            margin-top: 2rem;
+        }
+
+        .faq dt:first-child {
+            margin-top: 0;
+        }
+
+        .faq dd {
+            margin: 0.4rem 0 0;
+        }
+
+        /* Rodapé */
+        .site-footer {
+            background: var(--contorno);
+            color: var(--caramelo-claro);
+            padding: 2.5rem 0;
+            font-size: 1rem;
+        }
+
+        .site-footer .wrap {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .site-footer a {
+            color: var(--papel);
+        }
+
+        /* ---------- Responsivo ---------- */
+        @media (max-width: 900px) {
+            .app-panes {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .pane-files {
+                display: none;
+            }
+
+            .steps {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .features-grid,
+            .feature-wide {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .site-header nav {
+                display: none;
+            }
+
+            .stage .dog {
+                left: auto;
+                right: 1rem;
+                width: 8rem;
+                top: -4.8rem;
+            }
+
+            .app-panes {
+                grid-template-columns: 1fr;
+            }
+
+            .pane-code {
+                display: none;
+            }
+
+            .steps {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="site-header">
+        <div class="wrap">
+            <a class="brand" href="#">
+                <img src="img/caramelo_login.png" alt="" width="64" height="100">
+                CarameloTeX
+            </a>
+            <nav aria-label="Seções">
+                <a href="#baixar">Baixar</a>
+                <a href="#funcionalidades">Funcionalidades</a>
+                <a href="#perguntas">Perguntas</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="hero">
+            <div class="wrap">
+                <div class="hero-text">
+                    <h1>Escreva seu trabalho em LaTeX, mesmo sem internet.</h1>
+                    <p class="lead">
+                        O CarameloTeX é um editor LaTeX para Windows que já vem com o compilador.
+                        Abra a pasta do seu artigo, TCC ou tese e gere o PDF no seu próprio computador.
+                    </p>
+                    <div class="hero-actions">
+                        <a class="button" href="https://github.com/nacaratti/caramelotex/releases/latest">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14" />
+                            </svg>
+                            Baixar para Windows
+                        </a>
+                        <span class="note">Para Windows 10 e 11 (64 bits).</span>
+                    </div>
+                </div>
+
+                <div class="stage" aria-hidden="true">
+                    <img class="dog" src="img/caramelo_loading.png" alt="" width="561" height="359">
+                    <div class="app">
+                        <div class="app-bar">
+                            <span class="name">CarameloTeX</span>
+                            <span>tese</span>
+                            <span class="spacer"></span>
+                            <span>pdfLaTeX</span>
+                            <span class="compile">Compilar</span>
+                        </div>
+                        <div class="app-panes">
+                            <div class="pane-files">
+                                <div class="folder">capitulos</div>
+                                <div class="indent">introducao.tex</div>
+                                <div class="indent">metodo.tex</div>
+                                <div class="folder">figuras</div>
+                                <div class="active">tese.tex ✓</div>
+                                <div>referencias.bib</div>
+                            </div>
+                            <div class="pane-code"><span class="ln">1</span><span class="tok-cmd">\documentclass</span>{<span class="tok-arg">article</span>}
+<span class="ln">2</span><span class="tok-cmd">\usepackage</span>[<span class="tok-arg">brazilian</span>]{<span class="tok-arg">babel</span>}
+<span class="ln">3</span>
+<span class="ln">4</span><span class="tok-cmd">\title</span>{<span class="tok-arg">Fibras ópticas de sílica</span>}
+<span class="ln">5</span><span class="tok-cmd">\author</span>{<span class="tok-arg">Ana Souza</span>}
+<span class="ln">6</span>
+<span class="ln">7</span><span class="tok-cmd">\begin</span>{<span class="tok-arg">document</span>}
+<span class="ln">8</span><span class="tok-cmd">\maketitle</span>
+<span class="ln">9</span>
+<span class="ln">10</span><span class="tok-cmd">\section</span>{<span class="tok-arg">Introdução</span>}
+<span class="hl"><span class="ln">11</span>A atenuação cresce com o comprimento</span><span class="ln">12</span>da fibra, como mostra a equação:
+<span class="ln">13</span><span class="tok-cmd">\begin</span>{<span class="tok-arg">equation</span>}
+<span class="ln">14</span>  P(L) = P_0 \, e^{-\alpha L}
+<span class="ln">15</span><span class="tok-cmd">\end</span>{<span class="tok-arg">equation</span>}
+<span class="ln">16</span><span class="tok-com">% capítulos em arquivos separados</span>
+<span class="ln">17</span><span class="tok-cmd">\input</span>{<span class="tok-arg">capitulos/metodo</span>}</div>
+                            <div class="pane-pdf">
+                                <div class="page">
+                                    <p class="title" style="--i:0">Fibras ópticas de sílica</p>
+                                    <p class="author" style="--i:1">Ana Souza</p>
+                                    <p class="date" style="--i:2">18 de outubro de 2026</p>
+                                    <h4 style="--i:3"><span>1</span>Introdução</h4>
+                                    <p style="--i:4"><span class="synced">A atenuação cresce com o comprimento</span> da
+                                        fibra, como mostra a equação:</p>
+                                    <div class="eq" style="--i:5">P(L) = P<sub>0</sub>&thinsp;e<sup>−αL</sup><span
+                                            class="n">(1)</span></div>
+                                    <h4 style="--i:6"><span>2</span>Método</h4>
+                                    <p style="--i:7">As amostras foram preparadas por deposição química em fase de
+                                        vapor, e o perfil de índice foi medido em cinco pontos ao longo da preforma.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <section class="install" id="baixar">
+            <div class="wrap">
+                <h2>Como baixar e instalar</h2>
+                <p class="section-intro">
+                    Não precisa instalar MiKTeX, TeX Live nem Docker. Tudo o que o LaTeX precisa vem no instalador.
+                </p>
+
+                <ol class="steps">
+                    <li>
+                        <h3>Baixe o instalador</h3>
+                        <p>Na <a href="https://github.com/nacaratti/caramelotex/releases/latest">página de
+                                versões</a>, baixe o arquivo que termina em <code>x64-setup.exe</code>.</p>
+                    </li>
+                    <li>
+                        <h3>Execute o arquivo</h3>
+                        <p>Se o Windows mostrar “O Windows protegeu o computador”, clique em
+                            <em>Mais informações</em> e depois em <em>Executar assim mesmo</em>.</p>
+                    </li>
+                    <li>
+                        <h3>Espere a preparação</h3>
+                        <p>Na primeira vez que abrir, o CarameloTeX prepara o LaTeX. Leva cerca de um minuto e só
+                            acontece uma vez.</p>
+                    </li>
+                    <li>
+                        <h3>Abra seu trabalho</h3>
+                        <p>Escolha a pasta onde estão seus arquivos <code>.tex</code> ou comece um projeto novo a partir
+                            de um modelo.</p>
+                    </li>
+                </ol>
+
+                <div class="install-footer">
+                    <a class="button" href="https://github.com/nacaratti/caramelotex/releases/latest">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14" />
+                        </svg>
+                        Baixar para Windows
+                    </a>
+                    <p class="requirements">Requer Windows 10 ou 11 (64 bits) e cerca de 1 GB livre em disco.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="funcionalidades">
+            <div class="wrap">
+                <h2>O que dá para fazer</h2>
+                <p class="section-intro">
+                    Pensado para quem escreve trabalhos acadêmicos: arquivos no seu computador, compilação local e
+                    ajuda para encontrar o erro.
+                </p>
+
+                <div class="features-grid">
+                    <div class="feature feature-wide">
+                        <div>
+                            <h3>Comece por um modelo</h3>
+                            <p>Onze modelos prontos, que já compilam de primeira. Escolha um, diga onde
+                                criar a pasta e comece a escrever.</p>
+                        </div>
+                        <ul class="templates-list">
+                            <li>Artigo ABNT</li>
+                            <li>Artigo básico</li>
+                            <li>Conferência IEEE</li>
+                            <li>TCC</li>
+                            <li>Dissertação e tese</li>
+                            <li>Apresentação Beamer</li>
+                            <li>Beamer Metropolis</li>
+                            <li>Currículo</li>
+                            <li>Carta de apresentação</li>
+                            <li>Relatório técnico</li>
+                            <li>Fatura</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature">
+                        <h3>Funciona offline</h3>
+                        <p>O compilador LaTeX vem dentro do programa. Você gera o PDF no avião, no laboratório ou em
+                            qualquer lugar sem Wi-Fi.</p>
+                    </div>
+
+                    <div class="feature">
+                        <h3>Seus arquivos ficam nas suas pastas</h3>
+                        <p>Não há conta nem nuvem. O editor abre a pasta do projeto e salva direto nela, então você
+                            continua usando Git, OneDrive ou pendrive como já usa. Arquivos excluídos vão para a
+                            Lixeira.</p>
+                    </div>
+
+                    <div class="feature">
+                        <h3>Do código ao PDF e de volta</h3>
+                        <p>Dê dois cliques numa linha do código para ver o trecho no PDF. Segure <code>Ctrl</code> e
+                            clique no PDF para ir à linha que gerou aquele texto, mesmo em capítulos separados.</p>
+                    </div>
+
+                    <div class="feature">
+                        <h3>Erros que dizem onde estão</h3>
+                        <p>Cada erro mostra o arquivo e a linha. Um clique leva até ele. O editor também avisa sobre
+                            referências sem <code>\label</code>, figuras que não existem e arquivos <code>.bib</code>
+                            faltando.</p>
+                    </div>
+
+                    <div class="feature">
+                        <h3>Bibliografia sem configuração</h3>
+                        <p>BibTeX, natbib e biblatex com biber rodam automaticamente, quantas vezes for preciso.
+                            Escolha entre pdfLaTeX, XeLaTeX e LuaLaTeX no topo da tela.</p>
+                    </div>
+
+                    <div class="feature">
+                        <h3>Pacote faltando? Um clique resolve</h3>
+                        <p>O CarameloTeX já traz os pacotes mais usados. Se o seu documento pedir um que não está
+                            instalado, ele oferece baixar e instalar na hora, quando houver internet.</p>
+                    </div>
+
+                    <div class="feature">
+                        <h3>Traga projetos de outros editores</h3>
+                        <p>Importe um projeto inteiro em <code>.zip</code>, com figuras e bibliografia. Os arquivos são
+                            extraídos para uma pasta nova e o arquivo principal é detectado sozinho.</p>
+                    </div>
+
+                    <div class="feature">
+                        <h3>Assistente de IA, se você quiser</h3>
+                        <p>Um assistente opcional ajuda a escrever e corrigir trechos em LaTeX. Ele usa a sua própria
+                            chave da OpenAI ou do Google Gemini e só funciona com internet.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="faq" id="perguntas">
+            <div class="wrap">
+                <h2>Perguntas frequentes</h2>
+                <dl>
+                    <dt>Preciso ter o LaTeX instalado?</dt>
+                    <dd>Não. O CarameloTeX inclui o TinyTeX, uma distribuição LaTeX compacta. Se você já usa MiKTeX ou
+                        TeX Live, ele também consegue usar a sua instalação.</dd>
+
+                    <dt>Quando a internet é necessária?</dt>
+                    <dd>Só para baixar o instalador, instalar algum pacote LaTeX que não venha incluído e usar o
+                        assistente de IA. Escrever e compilar funcionam sem conexão.</dd>
+
+                    <dt>Meus documentos são enviados para algum servidor?</dt>
+                    <dd>Não. Os arquivos ficam nas pastas que você escolher e o PDF é gerado no seu computador. O
+                        assistente de IA é a exceção: se você usar, ele envia partes do documento ao provedor que você
+                        escolheu.</dd>
+
+                    <dt>Por que o Windows mostra um aviso ao instalar?</dt>
+                    <dd>O instalador ainda não tem assinatura digital, então o SmartScreen não reconhece o editor.
+                        Clique em <em>Mais informações</em> e em <em>Executar assim mesmo</em>.</dd>
+
+                    <dt>Funciona no macOS ou no Linux?</dt>
+                    <dd>Por enquanto, só no Windows.</dd>
+                </dl>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="wrap">
+            <span>CarameloTeX, editor LaTeX offline.</span>
+            <a href="https://github.com/nacaratti/caramelotex">Código no GitHub</a>
+        </div>
+    </footer>
+
+</body>
+
+</html>
