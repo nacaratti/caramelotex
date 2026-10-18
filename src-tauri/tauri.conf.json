@@ -28,7 +28,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "category": "Productivity",
     "shortDescription": "Editor LaTeX offline",
     "icon": [
@@ -41,8 +43,14 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["PortugueseBR", "English"]
+        "languages": [
+          "PortugueseBR",
+          "English"
+        ]
       }
-    }
+    },
+    "resources": [
+      "resources/*"
+    ]
   }
 }

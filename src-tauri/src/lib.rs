@@ -36,6 +36,7 @@ pub fn run() {
             fs_commands::save_project_config,
             fs_commands::create_project_folder,
             tex::prepare_tex,
+            tex::install_missing_file,
             compile::compile_project,
             compile::cancel_compile,
         ])

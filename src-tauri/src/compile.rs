@@ -326,3 +326,117 @@ pub async fn cancel_compile(state: State<'_, AppState>) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    //! Compilação de verdade. Precisa de um LaTeX instalado:
+    //!   $env:CARAMELOTEX_TEX_BIN = "...\TinyTeX\bin\windows"
+    //!   cargo test -- --ignored --nocapture
+
+    use super::*;
+    use crate::paths::canonical;
+
+    fn test_install() -> TexInstall {
+        let bin_dir = PathBuf::from(std::env::var("CARAMELOTEX_TEX_BIN").expect("defina CARAMELOTEX_TEX_BIN"));
+        let latexmk = bin_dir.join(if cfg!(windows) { "latexmk.exe" } else { "latexmk" });
+        TexInstall { source: "test".into(), has_latexmk: latexmk.is_file(), bin_dir }
+    }
+
+    fn fresh_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join("caramelotex-compile-test").join(name);
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        canonical(&dir).unwrap()
+    }
+
+    fn copy_dir(from: &Path, to: &Path) {
+        for entry in fs::read_dir(from).unwrap().flatten() {
+            fs::copy(entry.path(), to.join(entry.file_name())).unwrap();
+        }
+    }
+
+    fn compile(root: &Path, main: &str, engine: &str, timeout: Duration) -> CompileResult {
+        compile_blocking(
+            root.to_path_buf(),
+            main.into(),
+            engine.into(),
+            test_install(),
+            Arc::new(CompileState::default()),
+            timeout,
+        )
+        .unwrap()
+    }
+
+    fn log_tail(result: &CompileResult) -> String {
+        let lines: Vec<&str> = result.log.lines().collect();
+        lines[lines.len().saturating_sub(25)..].join("\n")
+    }
+
+    #[test]
+    #[ignore = "precisa de uma distribuição LaTeX (CARAMELOTEX_TEX_BIN)"]
+    fn compiles_fixtures_and_templates() {
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let mut cases: Vec<(PathBuf, String, &str)> = Vec::new();
+
+        let bib = fresh_dir("bibtex");
+        copy_dir(&repo.join("tests/fixtures/bibtex"), &bib);
+        for main in ["bibtex_sample.tex", "biblatex_sample.tex", "natlib_sample.tex"] {
+            cases.push((bib.clone(), main.into(), "pdflatex"));
+        }
+
+        let templates: Vec<serde_json::Value> =
+            serde_json::from_str(&fs::read_to_string(repo.join("src/templates/templates.json")).unwrap()).unwrap();
+        for template in &templates {
+            let id = template["id"].as_str().unwrap();
+            let dir = fresh_dir(&format!("template-{id}"));
+            for (path, content) in template["files"].as_object().unwrap() {
+                fs::write(dir.join(path), content.as_str().unwrap()).unwrap();
+            }
+            cases.push((dir, "main.tex".into(), "pdflatex"));
+        }
+
+        let xe = fresh_dir("xelatex");
+        fs::write(
+            xe.join("main.tex"),
+            "\\documentclass{article}\n\\usepackage{fontspec}\n\\usepackage[brazilian]{babel}\n\
+             \\begin{document}\nAcentuação: ção, ã, é. $E = mc^2$\n\\end{document}\n",
+        )
+        .unwrap();
+        cases.push((xe, "main.tex".into(), "xelatex"));
+
+        let mut failures = Vec::new();
+        for (root, main, engine) in &cases {
+            let result = compile(root, main, engine, Duration::from_secs(300));
+            println!(
+                "{:<45} {:<9} ok={} pdf={} synctex={} {}ms",
+                format!("{}/{main}", root.file_name().unwrap().to_string_lossy()),
+                engine,
+                result.ok,
+                result.pdf.is_some(),
+                result.synctex.is_some(),
+                result.duration_ms
+            );
+            if !(result.ok && result.pdf.is_some() && result.synctex.is_some()) {
+                failures.push(format!("{}/{main}:\n{}\n{}", root.display(), log_tail(&result), result.output));
+            }
+        }
+        assert!(failures.is_empty(), "Falharam:\n\n{}", failures.join("\n\n---\n\n"));
+    }
+
+    #[test]
+    #[ignore = "precisa de uma distribuição LaTeX (CARAMELOTEX_TEX_BIN)"]
+    fn reports_latex_errors_and_timeouts() {
+        let dir = fresh_dir("erros");
+        fs::write(dir.join("erro.tex"), "\\documentclass{article}\n\\begin{document}\n\\comandoinexistente\n\\end{document}\n").unwrap();
+        let result = compile(&dir, "erro.tex", "pdflatex", Duration::from_secs(120));
+        assert!(!result.ok);
+        assert!(result.log.contains("Undefined control sequence"), "{}", log_tail(&result));
+
+        // Laço infinito: precisa ser encerrado pelo timeout, matando a árvore de processos.
+        fs::write(dir.join("loop.tex"), "\\documentclass{article}\n\\begin{document}\n\\def\\x{\\x}\\x\n\\end{document}\n").unwrap();
+        let started = Instant::now();
+        let result = compile(&dir, "loop.tex", "pdflatex", Duration::from_secs(5));
+        assert!(result.timed_out && !result.ok);
+        assert!(started.elapsed() < Duration::from_secs(20));
+    }
+}

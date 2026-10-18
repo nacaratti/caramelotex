@@ -60,7 +60,13 @@ fn bin_dirs_of(tex_root: &Path) -> Vec<PathBuf> {
 }
 
 fn bundled_root(app: &AppHandle) -> Option<PathBuf> {
-    app.path().app_local_data_dir().ok().map(|d| d.join(TINYTEX_DIR))
+    let base = app.path().app_local_data_dir().ok()?;
+    let plain = base.to_str().is_some_and(|s| s.is_ascii() && !s.contains(' '));
+    if plain || !cfg!(windows) {
+        return Some(base.join(TINYTEX_DIR));
+    }
+    // O TeX se perde com espaços e acentos no caminho (ex.: usuário "João Silva").
+    std::env::var_os("ProgramData").map(|d| PathBuf::from(d).join("CarameloTeX").join(TINYTEX_DIR))
 }
 
 fn find_bundled(app: &AppHandle) -> Option<TexInstall> {
@@ -151,6 +157,78 @@ pub async fn prepare_tex(
     Ok(found)
 }
 
+fn tlmgr_path(install: &TexInstall) -> PathBuf {
+    install
+        .bin_dir
+        .join(if cfg!(windows) { "tlmgr.bat" } else { "tlmgr" })
+}
+
+/// Roda o tlmgr sem abrir janela de console e devolve (sucesso, saída).
+fn run_tlmgr(install: &TexInstall, args: &[&str]) -> Result<(bool, String), String> {
+    let mut cmd = std::process::Command::new(tlmgr_path(install));
+    cmd.args(args).stdin(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let out = cmd.output().map_err(|e| format!("Não foi possível executar o tlmgr: {e}"))?;
+    let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+    text.push_str(&String::from_utf8_lossy(&out.stderr));
+    Ok((out.status.success(), text))
+}
+
+/// Nome do pacote do TeX Live que contém `file`, a partir da saída de
+/// `tlmgr search --global --file /<file>` (linhas "pacote:" seguidas dos caminhos).
+fn package_for_file(search_output: &str, file: &str) -> Option<String> {
+    let suffix = format!("/{file}");
+    let mut current: Option<&str> = None;
+    for line in search_output.lines() {
+        if !line.starts_with(char::is_whitespace) && line.ends_with(':') && !line.starts_with("tlmgr") {
+            current = Some(line.trim_end_matches(':'));
+        } else if line.trim().ends_with(&suffix) {
+            if let Some(pkg) = current {
+                return Some(pkg.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Instala (pela internet) o pacote que fornece um arquivo faltante, ex.: "fontawesome5.sty".
+/// Só funciona com o TinyTeX/TeX Live (o MiKTeX instala pacotes sozinho).
+#[tauri::command]
+pub async fn install_missing_file(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    file: String,
+) -> Result<String, String> {
+    let valid = !file.is_empty()
+        && file.len() < 100
+        && file.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c));
+    if !valid {
+        return Err(format!("Nome de arquivo inválido: {file}"));
+    }
+    let install = current_install(&app, &state).ok_or("Nenhuma distribuição LaTeX encontrada")?;
+    if !tlmgr_path(&install).is_file() {
+        return Err("Esta distribuição LaTeX não usa o tlmgr. No MiKTeX, os pacotes são instalados automaticamente na compilação.".into());
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let (_, found) = run_tlmgr(&install, &["search", "--global", "--file", &format!("/{file}")])?;
+        let package = package_for_file(&found, &file)
+            .ok_or_else(|| format!("Nenhum pacote do TeX Live contém {file}. Verifique a internet e o nome do arquivo."))?;
+        let (ok, output) = run_tlmgr(&install, &["install", &package])?;
+        if ok {
+            Ok(package)
+        } else {
+            Err(format!("Falha ao instalar {package}:\n{output}"))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Instalação atual (detecta na hora se `prepare_tex` ainda não rodou).
 pub fn current_install(app: &AppHandle, state: &AppState) -> Option<TexInstall> {
     let mut cached = state.tex.lock().unwrap();
@@ -158,4 +236,18 @@ pub fn current_install(app: &AppHandle, state: &AppState) -> Option<TexInstall> 
         *cached = detect(app, None);
     }
     cached.clone()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finds_package_in_tlmgr_search() {
+        let output = "tlmgr: package repository https://mirror.ctan.org (verified)\n\
+                      fontawesome:\n\ttexmf-dist/tex/latex/fontawesome/fontawesome.sty\n\
+                      fontawesome5:\n\ttexmf-dist/tex/latex/fontawesome5/fontawesome5.sty\n";
+        assert_eq!(package_for_file(output, "fontawesome5.sty").as_deref(), Some("fontawesome5"));
+        assert_eq!(package_for_file(output, "nada.sty"), None);
+    }
 }
