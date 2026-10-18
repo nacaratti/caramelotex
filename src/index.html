@@ -11,6 +11,7 @@
 
     <!-- CodeMirror 5, PDF.js, JSZip, pako (empacotados localmente) -->
     <script type="module" src="./vendor/editor-libs.js"></script>
+    <script type="module" src="./vendor/tauri-bridge.js"></script>
 
     <!-- Custom Styles -->
     <link rel="stylesheet" href="styles/main.css">
@@ -50,19 +51,33 @@
                 </svg>
             </button>
 
-            <h1 class="text-2xl font-bold text-latex-green">LaTeX Editor</h1>
+            <h1 class="text-2xl font-bold text-latex-green">CarameloTeX</h1>
             <a href="projects.html"
                 class="text-sm text-gray-400 hover:text-white hover:underline transition-colors flex items-center space-x-1">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
                 </svg>
-                <span>Meus Projetos</span>
+                <span>Projetos</span>
             </a>
-            <span class="text-sm text-gray-500">| MVP v1.0</span>
+            <span id="projectName" class="text-sm text-gray-300 font-medium truncate max-w-xs"></span>
+            <button id="revealProjectBtn" class="text-gray-500 hover:text-white transition-colors" title="Abrir a pasta do projeto no Explorer">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                </svg>
+            </button>
         </div>
 
         <div class="flex items-center space-x-3">
+            <!-- Compilador -->
+            <select id="engineSelect" title="Compilador LaTeX"
+                class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg px-2 py-2 focus:outline-none focus:border-latex-green">
+                <option value="pdflatex">pdfLaTeX</option>
+                <option value="xelatex">XeLaTeX</option>
+                <option value="lualatex">LuaLaTeX</option>
+            </select>
+
             <!-- Compile Button -->
             <button id="compileBtn"
                 class="bg-latex-green hover:bg-teal-600 text-white px-6 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -85,8 +100,8 @@
                 <span class="text-sm text-gray-300">Auto</span>
             </label>
 
-            <!-- Download PDF -->
-            <button id="downloadBtn"
+            <!-- Salvar PDF -->
+            <button id="downloadBtn" title="Salvar PDF como..."
                 class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled>
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -96,16 +111,6 @@
                 </svg>
             </button>
 
-            <!-- Logout -->
-            <button id="logoutBtn"
-                class="text-gray-400 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-gray-800"
-                title="Sair">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
-                    </path>
-                </svg>
-            </button>
         </div>
     </header>
 
@@ -151,8 +156,7 @@
 
 
             <!-- Upload Input (hidden) -->
-            <input type="file" id="fileUploadInput" class="hidden"
-                accept=".bib,.sty,.cls,.tex,.png,.jpg,.jpeg,.pdf,.eps" multiple>
+            <input type="file" id="fileUploadInput" class="hidden" multiple>
 
             <!-- ZIP Upload Input (hidden) -->
             <input type="file" id="zipUploadInput" class="hidden" accept=".zip">

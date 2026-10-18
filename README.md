@@ -173,7 +173,6 @@ docker-compose logs -f latex-compiler
 - [ ] Sistema de templates predefinidos
 - [ ] Upload de imagens e recursos
 - [ ] Salvamento local (LocalStorage)
-- [ ] Exportar para Overleaf
 - [ ] Mais pacotes LaTeX
 - [ ] Modo colaborativo
 

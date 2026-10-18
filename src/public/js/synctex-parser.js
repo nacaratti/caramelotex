@@ -12,10 +12,15 @@ const SyncTexParser = (function() {
     /**
      * Parseia o conteúdo de um arquivo .synctex (já descomprimido)
      * @param {string} content - Conteúdo do arquivo synctex
+     * @param {string} [projectRoot] - Pasta do projeto; caminhos absolutos dentro
+     *   dela viram relativos (o pdflatex grava "C:/.../projeto/./main.tex")
      * @returns {Object} Dados estruturados do synctex
      */
-    function parse(content) {
+    function parse(content, projectRoot) {
         const lines = content.split('\n');
+        const rootPrefix = projectRoot
+            ? projectRoot.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase() + '/'
+            : null;
 
         const result = {
             version: 1,
@@ -44,7 +49,10 @@ const SyncTexParser = (function() {
                     const tag = parseInt(match[1]);
                     let path = match[2];
                     // Normaliza o caminho
-                    path = path.replace(/^\.\//, '').replace(/\\/g, '/');
+                    path = path.replace(/\\/g, '/').replace(/\/\.\//g, '/').replace(/^\.\//, '');
+                    if (rootPrefix && path.toLowerCase().startsWith(rootPrefix)) {
+                        path = path.substring(rootPrefix.length);
+                    }
                     result.inputs[tag] = {
                         tag: tag,
                         name: path.split('/').pop(),

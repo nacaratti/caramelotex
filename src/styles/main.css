@@ -6,8 +6,10 @@
     --latex-gray: #16213e;
 }
 
-/* CodeMirror 5 Customization */
-.CodeMirror {
+/* CodeMirror 5 Customization
+   (#editor aumenta a especificidade: o codemirror.css empacotado pode
+   carregar depois deste arquivo e definiria height: 300px) */
+#editor .CodeMirror {
     height: 100%;
     font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
     font-size: 14px;

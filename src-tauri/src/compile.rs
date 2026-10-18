@@ -261,8 +261,20 @@ fn compile_blocking(
     } else {
         String::from_utf8_lossy(&log_bytes).into_owned()
     };
-    let pdf = read_if_newer(&outdir.join(format!("{stem}.pdf")), started_at);
-    let synctex = read_if_newer(&outdir.join(format!("{stem}.synctex.gz")), started_at);
+    // Com sucesso, o PDF existente vale mesmo sem ter sido regravado (o latexmk
+    // pula a compilação quando nada mudou). Com falha, só aceita o que esta
+    // execução gravou, para não mostrar o PDF de uma compilação antiga.
+    let succeeded = matches!(end, RunEnd::Exited(true));
+    let read_output = |name: String| {
+        let path = outdir.join(name);
+        if succeeded {
+            fs::read(&path).ok()
+        } else {
+            read_if_newer(&path, started_at)
+        }
+    };
+    let pdf = read_output(format!("{stem}.pdf"));
+    let synctex = read_output(format!("{stem}.synctex.gz"));
 
     let (ok, cancelled, timed_out) = match end {
         RunEnd::Exited(success) => (success && pdf.is_some(), false, false),
@@ -421,6 +433,19 @@ mod tests {
             }
         }
         assert!(failures.is_empty(), "Falharam:\n\n{}", failures.join("\n\n---\n\n"));
+    }
+
+    #[test]
+    #[ignore = "precisa de uma distribuição LaTeX (CARAMELOTEX_TEX_BIN)"]
+    fn recompiles_unchanged_document() {
+        // O latexmk não regrava o PDF quando nada mudou; ainda assim é um sucesso.
+        let dir = fresh_dir("sem-mudancas");
+        fs::write(dir.join("main.tex"), "\\documentclass{article}\n\\begin{document}\nOi\n\\end{document}\n").unwrap();
+        let first = compile(&dir, "main.tex", "pdflatex", Duration::from_secs(120));
+        assert!(first.ok && first.pdf.is_some());
+        std::thread::sleep(Duration::from_secs(2));
+        let second = compile(&dir, "main.tex", "pdflatex", Duration::from_secs(120));
+        assert!(second.ok && second.pdf.is_some() && second.synctex.is_some(), "{}", second.output);
     }
 
     #[test]

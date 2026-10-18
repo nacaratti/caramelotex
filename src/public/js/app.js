@@ -22,39 +22,53 @@ let currentSynctexData = null; // Dados SyncTeX parseados para sincronização
 let autoCompileEnabled = false;
 let debounceTimer = null;
 
-// Sistema de arquivos do projeto
-let projectFiles = {
-    'main.tex': {
-        content: '', // Será preenchido com o template
-        type: 'main'
-    }
-};
-let currentFile = 'main.tex';
+// Sistema de arquivos do projeto (espelho da pasta aberta; caminhos relativos com "/")
+let projectFiles = {};
+let currentFile = null;
+let mainFile = null;          // Arquivo principal (o que é compilado)
+let projectEngine = 'pdflatex';
+let projectRoot = null;       // Caminho absoluto da pasta do projeto
 let actionMenuTarget = null; // Armazena o alvo do menu de ação
-let _projectName = 'Projeto Sem Nome'; // Cache do nome do projeto (evita query async no save)
+let _projectName = 'Projeto';
 let _isSaving = false; // Previne saves concorrentes
-let _dirtyFiles = new Set();   // paths modificados desde ultimo save
-let _deletedFiles = new Set(); // paths deletados desde ultimo save
-let _offlineSavePending = false; // true se um save falhou por rede
+let _dirtyFiles = new Set();   // arquivos de texto editados e ainda não gravados no disco
 let _saveStatusTimer = null;
 
-// Template padrão LaTeX (carregado do Supabase ou fallback)
-let defaultTemplate = null;
-
-/**
- * Carrega o template padrão do banco de dados ou usa fallback.
- * @returns {Promise<string>}
- */
-async function loadDefaultTemplate() {
-    if (defaultTemplate !== null) {
-        return defaultTemplate;
-    }
-
-    defaultTemplate = await StorageService.getDefaultTemplate();
-    return defaultTemplate;
+function isTextFile(file) {
+    return file && (file.type === 'main' || file.type === 'auxiliary');
 }
 
-// StorageService is now imported from js/storage.js
+/** Pasta do arquivo principal ('' se estiver na raiz); o LaTeX resolve caminhos a partir dela. */
+function mainDir() {
+    return mainFile && mainFile.includes('/') ? mainFile.substring(0, mainFile.lastIndexOf('/')) : '';
+}
+
+/** Junta caminhos relativos resolvendo "." e "..". */
+function joinPath(base, rel) {
+    const parts = [];
+    (base ? base + '/' + rel : rel).split('/').forEach(part => {
+        if (part === '..') parts.pop();
+        else if (part && part !== '.') parts.push(part);
+    });
+    return parts.join('/');
+}
+
+/**
+ * Converte um caminho citado no log do LaTeX (relativo à pasta do arquivo
+ * principal ou absoluto) para o caminho do arquivo no projeto, se existir.
+ */
+function logPathToProjectFile(path) {
+    if (!path) return null;
+    let p = path.replace(/\\/g, '/').replace(/\/\.\//g, '/');
+    const root = (projectRoot || '').replace(/\\/g, '/').toLowerCase();
+    if (/^[a-zA-Z]:\//.test(p) || p.startsWith('/')) {
+        if (!root || !p.toLowerCase().startsWith(root + '/')) return null;
+        p = p.substring(root.length + 1);
+    } else {
+        p = joinPath(mainDir(), p);
+    }
+    return projectFiles[p] ? p : null;
+}
 
 // ========== SAVE STATUS ==========
 function updateSaveStatus(status) {
@@ -84,10 +98,6 @@ function updateSaveStatus(status) {
                 el.className = '';
             }, 5000);
             break;
-        case 'offline':
-            el.textContent = 'Offline - salvo na fila';
-            el.className = 'text-orange-400';
-            break;
         default:
             el.textContent = 'Pronto';
             el.className = '';
@@ -96,22 +106,25 @@ function updateSaveStatus(status) {
 
 // ========== INICIALIZAÇÃO ==========
 document.addEventListener('DOMContentLoaded', async function () {
-    console.log('Inicializando LaTeX Editor...');
+    console.log('Inicializando CarameloTeX...');
 
-    // Auth guard: redireciona para login se não autenticado
-    const session = await AuthService.requireAuth();
-    if (!session) return;
-
-    // Verifica se há um projeto selecionado
-    const currentProjectId = StorageService.getCurrentProjectId();
-    if (!currentProjectId) {
-        const newId = await StorageService.createProject('Meu Projeto');
-        StorageService.setCurrentProjectId(newId);
+    // Sem projeto selecionado: volta para a tela inicial
+    const projectPath = StorageService.getCurrentProjectPath();
+    if (!projectPath) {
+        window.location.href = 'projects.html';
+        return;
     }
 
     initEditor();
     initViewer();
-    await initFileSystem();
+    try {
+        await initFileSystem(projectPath);
+    } catch (e) {
+        console.error('Erro ao abrir o projeto:', e);
+        alert(`Não foi possível abrir o projeto:\n${e}`);
+        window.location.href = 'projects.html';
+        return;
+    }
 
     // Hide loading overlay
     const overlay = document.getElementById('editorLoadingOverlay');
@@ -119,24 +132,27 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     setupEventListeners();
 
-    // Setup Auto-save
+    // Rede de segurança: grava o que estiver pendente a cada 30s
     setInterval(() => {
         saveCurrentProject();
-    }, 30000); // Auto-save every 30s
+    }, 30000);
 
     // beforeunload não pode await – o debounce de 2s garante que a maioria das edições já está salva
     window.addEventListener('beforeunload', () => {
-        // Fire-and-forget (browser pode cancelar a promise)
         saveCurrentProject();
     });
 
     // Setup Resizer
     initResizer();
 
-    // Auto-compile on editor load - small delay to ensure everything is ready
-    setTimeout(() => {
-        compile();
-    }, 100);
+    // Compila ao abrir, se houver arquivo principal
+    if (mainFile) {
+        setTimeout(() => {
+            compile();
+        }, 100);
+    } else {
+        showToast('Nenhum arquivo com \\documentclass encontrado. Use "Definir como principal" no menu de um .tex.', 'warning');
+    }
 });
 
 function initResizer() {
@@ -187,64 +203,49 @@ function initResizer() {
     });
 }
 
+/** Copia o conteúdo do editor para o arquivo atual, marcando-o como alterado. */
+function syncEditorToCurrentFile() {
+    const file = projectFiles[currentFile];
+    if (!isTextFile(file)) return;
+    const editorContent = getEditorContent();
+    if (file.content !== editorContent) {
+        file.content = editorContent;
+        _dirtyFiles.add(currentFile);
+    }
+}
+
+/** Grava no disco os arquivos de texto alterados. */
 async function saveCurrentProject() {
-    const currentId = StorageService.getCurrentProjectId();
-    if (!currentId || _isSaving) return;
-
-    // Sync editor content - only mark dirty if content actually changed
-    if (projectFiles[currentFile] && projectFiles[currentFile].type !== 'folder' && projectFiles[currentFile].type !== 'binary') {
-        const editorContent = getEditorContent();
-        if (projectFiles[currentFile].content !== editorContent) {
-            projectFiles[currentFile].content = editorContent;
-            _dirtyFiles.add(currentFile);
-        }
+    if (!projectRoot) return;
+    // Outra gravação em andamento: espera e tenta de novo (o compile depende disso)
+    while (_isSaving) {
+        await new Promise(resolve => setTimeout(resolve, 50));
     }
 
-    // Skip save if nothing changed
-    if (_dirtyFiles.size === 0 && _deletedFiles.size === 0 && !_offlineSavePending) {
-        return;
-    }
-
-    // If offline, just mark pending
-    if (!navigator.onLine) {
-        _offlineSavePending = true;
-        updateSaveStatus('offline');
-        return;
-    }
+    syncEditorToCurrentFile();
+    if (_dirtyFiles.size === 0) return;
 
     _isSaving = true;
     updateSaveStatus('saving');
 
-    try {
-        // Build dirty files subset
-        const dirtyFilesObj = {};
-        for (const path of _dirtyFiles) {
-            if (projectFiles[path]) {
-                dirtyFilesObj[path] = projectFiles[path];
-            }
+    const pending = [..._dirtyFiles];
+    _dirtyFiles.clear();
+    const failed = [];
+    for (const path of pending) {
+        const file = projectFiles[path];
+        if (!isTextFile(file)) continue;
+        try {
+            await StorageService.writeText(path, file.content);
+        } catch (e) {
+            console.error(`Erro ao salvar ${path}:`, e);
+            failed.push(path);
         }
-        const deletedPaths = [..._deletedFiles];
-
-        const success = await StorageService.saveProjectDelta(
-            currentId, _projectName, dirtyFilesObj, deletedPaths
-        );
-
-        if (success) {
-            _dirtyFiles.clear();
-            _deletedFiles.clear();
-            _offlineSavePending = false;
-            updateSaveStatus('saved');
-        } else {
-            _offlineSavePending = true;
-            updateSaveStatus('error');
-        }
-    } catch (e) {
-        console.error('Save failed:', e);
-        _offlineSavePending = true;
-        updateSaveStatus(!navigator.onLine ? 'offline' : 'error');
-    } finally {
-        _isSaving = false;
     }
+
+    // O que falhou volta para a fila da próxima tentativa
+    failed.forEach(path => _dirtyFiles.add(path));
+    updateSaveStatus(failed.length ? 'error' : 'saved');
+    _isSaving = false;
 }
 
 // ========== EDITOR ==========
@@ -273,8 +274,7 @@ function initEditor() {
         if (autoCompileEnabled) {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
-                saveCurrentProject(); // Save before compile
-                compile();
+                compile(); // compile() grava os arquivos antes
             }, 1000);
         } else {
             // Manual save debounce
@@ -312,325 +312,136 @@ function getEditorContent() {
 }
 
 // ========== COMPILER ==========
-// Prioridade: 1) LATEX_API_URL (produção/Render), 2) localhost, 3) API pública
-const API_URL_CONFIGURED = (typeof LATEX_API_URL !== 'undefined' && LATEX_API_URL) ? LATEX_API_URL : null;
-const API_URL_LOCAL = 'http://localhost:8080';
-const API_URL_PUBLIC = 'https://latex.ytotech.com';
-
-// Se temos URL configurada (Render), usa ela; senão tenta localhost
-const API_URL_PRIMARY = API_URL_CONFIGURED || API_URL_LOCAL;
+// Compila localmente pelo backend (latexmk + TinyTeX/TeX do sistema), lendo os arquivos do disco.
 let isCompiling = false;
-let compileAbortController = null;
+let compileRequestId = 0;
+
+function base64ToBytes(base64) {
+    return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+}
+
+/** Arquivo .sty/.cls faltando no log ("LaTeX Error: File `x.sty' not found"), ou null. */
+function findMissingFile(log) {
+    const match = log.match(/File `([^']+\.(?:sty|cls|bst|def|cfg|clo|fd|bbx|cbx|lbx))' not found/);
+    return match ? match[1] : null;
+}
+
+async function offerMissingPackage(file) {
+    const install = confirm(
+        `O pacote que fornece "${file}" não está instalado.\n\n` +
+        'Instalar agora? (precisa de internet)'
+    );
+    if (!install) return;
+    showToast(`Instalando o pacote de ${file}...`, 'info');
+    try {
+        const pkg = await StorageService.installMissingFile(file);
+        showToast(`Pacote "${pkg}" instalado. Recompilando...`, 'success');
+        compile();
+    } catch (e) {
+        console.error(e);
+        showToast(String(e), 'error');
+    }
+}
 
 async function compile() {
-    // Cancela compilação anterior se ainda estiver em andamento
-    if (compileAbortController) {
-        compileAbortController.abort();
-        compileAbortController = null;
+    if (!mainFile) {
+        showToast('Defina o arquivo principal (menu do arquivo .tex > "Definir como principal")', 'warning');
+        return;
     }
 
-    if (isCompiling) {
-        // A compilação anterior foi abortada, mas o finally ainda não executou.
-        // Aguarda brevemente para o cleanup do ciclo anterior.
-        isCompiling = false;
-    }
-
-    compileAbortController = new AbortController();
+    // Uma nova compilação substitui a anterior (o backend cancela o processo antigo)
+    const requestId = ++compileRequestId;
 
     const compileBtn = document.getElementById('compileBtn');
     const compileBtnText = document.getElementById('compileBtnText');
     const compileStatus = document.getElementById('compileStatus');
     const loadingSpinner = document.getElementById('loadingSpinner');
-    // const errorConsole = document.getElementById('errorConsole'); // Removed
-    // const errorText = document.getElementById('errorText'); // Removed
 
     isCompiling = true;
     compileBtn.disabled = true;
     compileBtnText.textContent = 'Compilando...';
     loadingSpinner.classList.remove('hidden');
-    // errorConsole.classList.add('hidden'); // Removed
 
     try {
-        compileStatus.textContent = 'Preparando código LaTeX... (20%)';
+        compileStatus.textContent = 'Salvando arquivos...';
+        await saveCurrentProject();
 
-        // Salva o conteúdo atual do editor no arquivo atual
-        const fileToSave = projectFiles[currentFile];
-        if (fileToSave && fileToSave.type !== 'folder' && fileToSave.type !== 'binary') {
-            fileToSave.content = getEditorContent();
-        } else if (!fileToSave) {
-            console.warn(`⚠️ Tentativa de salvar em arquivo inexistente: ${currentFile}`);
-            // Tenta recuperar para main.tex se perder referência
-            if (projectFiles['main.tex']) {
-                currentFile = 'main.tex';
-            }
-        }
+        compileStatus.textContent = `Compilando ${mainFile} (${projectEngine})...`;
+        const result = await StorageService.compile(mainFile, projectEngine);
 
-        compileStatus.textContent = 'Enviando para servidor... (40%)';
+        // Resultado de uma compilação que já foi substituída por outra
+        if (requestId !== compileRequestId || result.cancelled) return;
 
-        // Prepara recursos: arquivo principal + arquivos auxiliares
-        const resources = [];
-        let mainContent = '';
+        console.log(`Compilação: ok=${result.ok} em ${result.durationMs}ms (${result.texSource})`);
 
-        Object.keys(projectFiles).forEach(filename => {
-            const file = projectFiles[filename];
-
-            if (file.type === 'folder') return; // Ignora pastas
-
-            if (file.type === 'main') {
-                mainContent = file.content;
-                resources.push({
-                    main: true,
-                    content: file.content
-                });
-            } else if (file.type === 'auxiliary') {
-                resources.push({
-                    path: filename,
-                    content: file.content
-                });
-            } else if (file.type === 'binary') {
-                const base64Content = file.content.split(',')[1];
-                resources.push({
-                    path: filename,
-                    file: base64Content
-                });
-            }
-        });
-
-        // Detecta automaticamente se usa biblatex (requer biber) ou bibtex tradicional
-        const usesBiblatex = /\\usepackage(\[.*?\])?\{biblatex\}/.test(mainContent);
-        const bibCommand = usesBiblatex ? 'biber' : 'bibtex';
-
-        // Log detalhado dos arquivos sendo enviados
-        console.log(`📦 Enviando ${resources.length} arquivo(s) para compilação:`);
-        resources.forEach((r, i) => {
-            const name = r.main ? 'main.tex (principal)' : r.path;
-            const type = r.file ? 'binary' : 'text';
-            console.log(`   ${i + 1}. ${name} [${type}]`);
-        });
-        console.log(`📚 Bibliografia: usando ${bibCommand} (biblatex: ${usesBiblatex})`);
-
-        // Detecta o nome do arquivo .bib usado no documento
-        const bibMatch = mainContent.match(/\\bibliography\{([^}]+)\}/);
-        const bibFileName = bibMatch ? bibMatch[1] : null;
-        if (bibFileName) {
-            console.log(`📄 Arquivo de bibliografia referenciado: ${bibFileName}.bib`);
-            // Verifica se o arquivo existe nos resources
-            const bibExists = resources.some(r => r.path === `${bibFileName}.bib` || r.path === bibFileName);
-            if (!bibExists) {
-                console.warn(`⚠️ Arquivo ${bibFileName}.bib não encontrado nos recursos enviados!`);
-            }
-        }
-
-        const payload = {
-            compiler: "pdflatex",
-            resources: resources,
-            options: {
-                bibliography: {
-                    command: bibCommand
-                },
-                response: {
-                    log_files_on_failure: true
+        if (result.pdf) {
+            currentPdfData = base64ToBytes(result.pdf);
+            currentSynctexData = null;
+            if (result.synctex && typeof pako !== 'undefined' && typeof SyncTexParser !== 'undefined') {
+                try {
+                    const synctexText = pako.inflate(base64ToBytes(result.synctex), { to: 'string' });
+                    currentSynctexData = SyncTexParser.parse(synctexText, projectRoot);
+                } catch (syncErr) {
+                    console.warn('Erro ao ler SyncTeX:', syncErr);
                 }
             }
-        };
-
-        // Debug: mostra o payload sendo enviado
-        console.log('📤 Payload enviado para API:', JSON.stringify(payload, null, 2).substring(0, 2000) + '...');
-
-        compileStatus.textContent = 'Compilando LaTeX... (60%)';
-
-        // Tenta servidor primário (Railway ou localhost), fallback para API pública
-        let response;
-        let usedServer = API_URL_PRIMARY;
-
-        try {
-            const serverType = API_URL_CONFIGURED ? 'remoto' : 'local';
-            console.log(`🖥️ Tentando servidor ${serverType}: ${API_URL_PRIMARY}`);
-            response = await fetch(API_URL_PRIMARY + '/builds/sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                signal: compileAbortController.signal
-            });
-        } catch (primaryError) {
-            // Servidor primário não disponível, usa API pública (sem SyncTeX)
-            console.log(`⚠️ Servidor primário indisponível, usando API pública: ${API_URL_PUBLIC}`);
-            console.log(`⚠️ Nota: API pública não suporta SyncTeX`);
-            usedServer = API_URL_PUBLIC;
-            response = await fetch(API_URL_PUBLIC + '/builds/sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                signal: compileAbortController.signal
-            });
-        }
-
-        console.log(`✅ Usando servidor: ${usedServer}`);
-
-        compileStatus.textContent = 'Gerando PDF... (80%)';
-
-        const contentType = response.headers.get('content-type') || '';
-
-        // Servidor local retorna JSON com PDF + SyncTeX em base64
-        if (response.ok && contentType.includes('json')) {
-            const data = await response.json();
-
-            if (data.pdf) {
-                // Decodifica PDF de base64
-                const pdfBytes = Uint8Array.from(atob(data.pdf), c => c.charCodeAt(0));
-                currentPdfData = pdfBytes;
-
-                // Decodifica e parseia SyncTeX se disponível
-                if (data.synctex && typeof pako !== 'undefined' && typeof SyncTexParser !== 'undefined') {
-                    try {
-                        const synctexGz = Uint8Array.from(atob(data.synctex), c => c.charCodeAt(0));
-                        const synctexText = pako.inflate(synctexGz, { to: 'string' });
-                        currentSynctexData = SyncTexParser.parse(synctexText);
-                        console.log('✅ SyncTeX carregado:', Object.keys(currentSynctexData.blockNumberLine));
-                    } catch (syncErr) {
-                        console.warn('⚠️ Erro ao parsear SyncTeX:', syncErr);
-                        currentSynctexData = null;
-                    }
-                } else {
-                    currentSynctexData = null;
-                }
-
-                compileStatus.textContent = 'PDF gerado com sucesso! (100%)';
-
-                await loadPDF(pdfBytes);
-                document.getElementById('downloadBtn').disabled = false;
-
-                // Detecta warnings no código-fonte
-                var sourceWarnings = detectSourceWarnings(projectFiles);
-                if (sourceWarnings.length > 0) {
-                    renderErrorLog(sourceWarnings);
-                    showToast('PDF gerado com ' + sourceWarnings.length + ' aviso(s)', 'warning');
-                    var toggleBtn = document.getElementById('toggleLogsBtn');
-                    toggleBtn.classList.add('text-yellow-400');
-                    toggleBtn.title = sourceWarnings.length + ' aviso(s) detectado(s)';
-                } else {
-                    const syncStatus = currentSynctexData ? ' (SyncTeX ativo)' : '';
-                    showToast('Compilação concluída!' + syncStatus, 'success');
-                    var toggleBtn = document.getElementById('toggleLogsBtn');
-                    toggleBtn.classList.remove('text-yellow-400', 'text-red-400');
-                    toggleBtn.title = 'Ver Logs';
-                }
-
-                // Switch to PDF view on success
-                switchViewerMode('pdf');
-            } else {
-                // JSON de erro
-                throw new Error(data.error || data.logs || JSON.stringify(data));
-            }
-        }
-        // Fallback: API pública retorna PDF diretamente
-        else if (response.ok && contentType.includes('pdf')) {
-            const pdfData = await response.arrayBuffer();
-            const pdfArray = new Uint8Array(pdfData);
-            currentPdfData = new Uint8Array(pdfArray);
-            currentSynctexData = null; // API pública não retorna SyncTeX
-
-            compileStatus.textContent = 'PDF gerado com sucesso! (100%)';
-
-            await loadPDF(new Uint8Array(pdfArray));
+            await loadPDF(currentPdfData.slice());
             document.getElementById('downloadBtn').disabled = false;
+        }
 
-            // Detecta warnings no código-fonte (a API não retorna logs no sucesso)
-            var sourceWarnings = detectSourceWarnings(projectFiles);
-            if (sourceWarnings.length > 0) {
-                renderErrorLog(sourceWarnings);
-                showToast('PDF gerado com ' + sourceWarnings.length + ' aviso(s)', 'warning');
-                // Mostra badge de aviso no botão de logs
-                var toggleBtn = document.getElementById('toggleLogsBtn');
+        const toggleBtn = document.getElementById('toggleLogsBtn');
+        const logEntries = parseLatexLog(result.log);
+
+        if (result.ok) {
+            const warnings = logEntries.filter(e => e.type === 'warning').concat(detectSourceWarnings(projectFiles));
+            renderErrorLog(warnings);
+            highlightErrors(warnings);
+            compileStatus.textContent = `PDF gerado (${(result.durationMs / 1000).toFixed(1)}s)`;
+            if (warnings.length > 0) {
+                showToast('PDF gerado com ' + warnings.length + ' aviso(s)', 'warning');
                 toggleBtn.classList.add('text-yellow-400');
-                toggleBtn.title = sourceWarnings.length + ' aviso(s) detectado(s)';
+                toggleBtn.title = warnings.length + ' aviso(s) detectado(s)';
             } else {
-                showToast('Compilação concluída! (sem SyncTeX)', 'success');
-                var toggleBtn = document.getElementById('toggleLogsBtn');
                 toggleBtn.classList.remove('text-yellow-400', 'text-red-400');
                 toggleBtn.title = 'Ver Logs';
             }
-
-            // Switch to PDF view on success
             switchViewerMode('pdf');
-        } else {
-            let logContent = '';
-
-            // Verifica se a resposta é JSON antes de tentar parsear
-            const errorContentType = response.headers.get('content-type') || '';
-            if (errorContentType.includes('json')) {
-                try {
-                    const errorData = await response.json();
-                    console.log('API error response:', errorData);
-
-                    // Prefer full log file content if available, otherwise stdout logs
-                    if (errorData.log_files) {
-                        logContent = Object.values(errorData.log_files).join('\n');
-                    }
-
-                    if (!logContent && errorData.logs) {
-                        logContent = typeof errorData.logs === 'string'
-                            ? errorData.logs
-                            : JSON.stringify(errorData.logs, null, 2);
-                    }
-
-                    if (!logContent && errorData.error) {
-                        logContent = errorData.error;
-                    }
-
-                    if (!logContent) {
-                        logContent = JSON.stringify(errorData, null, 2);
-                    }
-                } catch (jsonError) {
-                    logContent = `Erro ao processar resposta do servidor (HTTP ${response.status})`;
-                }
-            } else {
-                // Resposta não-JSON (ex: HTML de erro 502/503 do proxy)
-                const textBody = await response.text();
-                logContent = `Servidor retornou HTTP ${response.status}.\n${textBody.substring(0, 500)}`;
-            }
-
-            throw new Error(logContent);
-        }
-
-    } catch (error) {
-        // Ignora erros de cancelamento (compilação substituída por uma nova)
-        if (error.name === 'AbortError') {
-            console.log('⏹️ Compilação anterior cancelada');
             return;
         }
 
-        console.error('❌ Erro na compilação:', error);
-
-        if (error.message.includes('Failed to fetch')) {
-            compileStatus.textContent = 'Erro: Servidor LaTeX offline';
-            renderErrorLog([{
+        // Falhou: mostra os erros (o PDF parcial, se houver, continua carregado)
+        if (result.timedOut) {
+            logEntries.unshift({
                 type: 'error',
-                message: 'O servidor LaTeX não está rodando ou é inacessível.\n' + error.message,
-                line: null
-            }]);
-        } else {
-            compileStatus.textContent = 'Erro na compilação';
-
-            const logEntries = parseLatexLog(error.message);
-            renderErrorLog(logEntries);
-            highlightErrors(logEntries);
+                message: 'A compilação passou do tempo limite e foi interrompida. Verifique laços infinitos ou documentos muito pesados.',
+                line: null,
+            });
         }
-
-        // Sempre alterna para a aba de logs em caso de erro
+        compileStatus.textContent = 'Erro na compilação';
+        renderErrorLog(logEntries);
+        highlightErrors(logEntries);
         switchViewerMode('logs');
-        var toggleBtn = document.getElementById('toggleLogsBtn');
         toggleBtn.classList.add('text-red-400');
         toggleBtn.classList.remove('text-yellow-400');
         toggleBtn.title = 'Erros na compilação';
+        showToast('Erro na compilação', 'error');
 
+        const missing = findMissingFile(result.log);
+        if (missing) offerMissingPackage(missing);
+    } catch (error) {
+        if (requestId !== compileRequestId) return;
+        console.error('Erro na compilação:', error);
+        compileStatus.textContent = 'Erro na compilação';
+        renderErrorLog([{ type: 'error', message: String(error), line: null }]);
+        switchViewerMode('logs');
         showToast('Erro na compilação', 'error');
     } finally {
-        isCompiling = false;
-        compileAbortController = null;
-        compileBtn.disabled = false;
-        compileBtnText.textContent = 'Compilar';
-        loadingSpinner.classList.add('hidden');
+        if (requestId === compileRequestId) {
+            isCompiling = false;
+            compileBtn.disabled = false;
+            compileBtnText.textContent = 'Compilar';
+            loadingSpinner.classList.add('hidden');
+        }
     }
 }
 
@@ -643,6 +454,20 @@ function parseLatexLog(logText) {
 
     while (i < lines.length) {
         const line = lines[i];
+
+        // Formato -file-line-error: "./capitulo.tex:12: Undefined control sequence."
+        const fileLine = line.match(/^(.+?\.(?:tex|ltx|sty|cls|bib|def|cfg|bbl)):(\d+): (.*)$/);
+        if (fileLine) {
+            entries.push({
+                type: 'error',
+                message: fileLine[3],
+                line: parseInt(fileLine[2]),
+                file: logPathToProjectFile(fileLine[1]),
+                raw: line
+            });
+            i++;
+            continue;
+        }
 
         // Detecta Erro LaTeX (! Error)
         if (line.startsWith('! ')) {
@@ -782,15 +607,17 @@ function detectSourceWarnings(files) {
             warnings.push({
                 type: 'warning',
                 message: 'Referência \\ref{' + ref.label + '} sem \\label{' + ref.label + '} correspondente — vai aparecer como "??" no PDF',
-                line: ref.file === 'main.tex' ? ref.line : null,
+                line: ref.line,
+                file: ref.file,
                 raw: ref.file + ':' + ref.line
             });
         }
     });
 
     // Verifica imagens referenciadas que não existem nos arquivos do projeto
+    // (caminhos do LaTeX são relativos à pasta do arquivo principal)
     allIncludes.forEach(function(inc) {
-        var imgPath = inc.path;
+        var imgPath = joinPath(mainDir(), inc.path);
         // Tenta variações comuns (com e sem extensão)
         var found = fileNames.has(imgPath);
         if (!found) {
@@ -802,16 +629,17 @@ function detectSourceWarnings(files) {
         if (!found) {
             warnings.push({
                 type: 'warning',
-                message: 'Imagem "' + imgPath + '" não encontrada nos arquivos do projeto — pode gerar erro ou imagem ausente no PDF',
-                line: inc.file === 'main.tex' ? inc.line : null,
-                raw: '\\includegraphics{' + imgPath + '} em ' + inc.file
+                message: 'Imagem "' + inc.path + '" não encontrada nos arquivos do projeto — pode gerar erro ou imagem ausente no PDF',
+                line: inc.line,
+                file: inc.file,
+                raw: '\\includegraphics{' + inc.path + '} em ' + inc.file
             });
         }
     });
 
     // Verifica arquivos .bib referenciados
     allBibResources.forEach(function(bib) {
-        var bibPath = bib.path;
+        var bibPath = joinPath(mainDir(), bib.path);
         if (!bibPath.endsWith('.bib')) bibPath += '.bib';
         if (!fileNames.has(bibPath)) {
             warnings.push({
@@ -854,7 +682,7 @@ function renderErrorLog(entries) {
         card.className = `flex items-start p-3 rounded bg-gray-800 border-l-4 ${iconInfo.border} ${clickableClass}`;
 
         if (entry.line) {
-            card.addEventListener('click', () => goToLine(entry.line));
+            card.addEventListener('click', () => goToLine(entry.line, entry.file));
         }
 
         const inner = document.createElement('div');
@@ -871,7 +699,7 @@ function renderErrorLog(entries) {
         if (entry.line) {
             const lineSpan = document.createElement('span');
             lineSpan.className = 'text-xs text-gray-500 font-mono';
-            lineSpan.textContent = `Linha ${entry.line}`;
+            lineSpan.textContent = entry.file ? `${entry.file}:${entry.line}` : `Linha ${entry.line}`;
             topRow.appendChild(lineSpan);
         }
 
@@ -917,9 +745,11 @@ function switchViewerMode(mode) {
 
 // Markers handles
 let errorMarkers = [];
+let lastLogEntries = []; // Reaplicados ao trocar de arquivo no editor
 
 function highlightErrors(entries) {
     if (!editor) return;
+    lastLogEntries = entries;
 
     // Limpa marcadores anteriores
     errorMarkers.forEach(marker => marker.clear());
@@ -927,7 +757,8 @@ function highlightErrors(entries) {
     editor.clearGutter('CodeMirror-linenumbers'); // Se usarmos gutters customizados
 
     entries.forEach(entry => {
-        if (entry.line) {
+        // Entradas sem arquivo identificado são do arquivo principal
+        if (entry.line && (entry.file || mainFile) === currentFile) {
             // CodeMirror é 0-indexed
             const lineIndex = entry.line - 1;
 
@@ -950,8 +781,12 @@ function highlightErrors(entries) {
     });
 }
 
-function goToLine(line) {
+function goToLine(line, file) {
     if (!editor) return;
+    const target = file || mainFile;
+    if (target && target !== currentFile && isTextFile(projectFiles[target])) {
+        selectFile(target);
+    }
     const lineIndex = line - 1;
     editor.setCursor(lineIndex, 0);
     editor.focus();
@@ -1036,7 +871,7 @@ function forwardSyncToPdf(lineNumber) {
         return;
     }
 
-    const fileName = currentFile || 'main.tex';
+    const fileName = currentFile || mainFile;
     const blocks = SyncTexParser.forwardSync(currentSynctexData, fileName, lineNumber);
 
     if (!blocks || blocks.length === 0) {
@@ -1110,13 +945,8 @@ function reverseSyncToEditor(pageNum, canvasX, canvasY, canvas) {
         return;
     }
 
-    // Se o arquivo é diferente do atual, troca
-    if (result.file !== currentFile && projectFiles[result.file]) {
-        selectFile(result.file);
-    }
-
-    // Vai para a linha no editor
-    goToLine(result.line);
+    // Vai para a linha no editor (trocando de arquivo se for outro do projeto)
+    goToLine(result.line, projectFiles[result.file] ? result.file : currentFile);
 
     console.log(`🔗 Reverse sync: página ${pageNum} (${Math.round(canvasX)}, ${Math.round(canvasY)}) → ${result.file}:${result.line}`);
 }
@@ -1131,7 +961,7 @@ function setupReverseSyncHandler() {
     pdfContainer.addEventListener('click', function(event) {
         if (!event.ctrlKey) return;
         if (!currentSynctexData) {
-            showToast('SyncTeX não disponível - compile com servidor local', 'warning');
+            showToast('SyncTeX não disponível - compile o documento primeiro', 'warning');
             return;
         }
 
@@ -1176,8 +1006,22 @@ function setupReverseSyncHandler() {
 function setupEventListeners() {
     document.getElementById('compileBtn').addEventListener('click', compile);
 
-    // Logout
-    document.getElementById('logoutBtn').addEventListener('click', () => AuthService.signOut());
+    // Compilador (pdflatex/xelatex/lualatex), salvo no .caramelotex.json do projeto
+    const engineSelect = document.getElementById('engineSelect');
+    engineSelect.value = projectEngine;
+    engineSelect.addEventListener('change', async function () {
+        projectEngine = engineSelect.value;
+        try {
+            await StorageService.saveConfig(mainFile, projectEngine);
+        } catch (e) {
+            console.error(e);
+        }
+        compile();
+    });
+
+    document.getElementById('revealProjectBtn').addEventListener('click', () => {
+        StorageService.revealInExplorer(projectRoot, '').catch(e => showToast(String(e), 'error'));
+    });
 
     document.getElementById('toggleLogsBtn').addEventListener('click', function () {
         const logsContainer = document.getElementById('logsContainer');
@@ -1244,6 +1088,7 @@ function setupEventListeners() {
     });
 
     document.addEventListener('keydown', function (e) {
+        // Ctrl+S salva e compila
         if ((e.ctrlKey || e.metaKey) && e.key === 's') {
             e.preventDefault();
             compile();
@@ -1253,75 +1098,61 @@ function setupEventListeners() {
             toggleFilesPanel();
         }
     });
-
-    // Offline/Online detection
-    window.addEventListener('online', () => {
-        console.log('Conexao restaurada. Verificando saves pendentes...');
-        if (_offlineSavePending) {
-            Object.keys(projectFiles).forEach(path => _dirtyFiles.add(path));
-            saveCurrentProject();
-        }
-    });
-
-    window.addEventListener('offline', () => {
-        console.log('Conexao perdida.');
-        updateSaveStatus('offline');
-    });
 }
 
-// ========== DOWNLOAD PDF ==========
-function downloadPDF() {
-    if (!currentPdfData) {
+// ========== EXPORTAR PDF ==========
+async function downloadPDF() {
+    if (!currentPdfData || !mainFile) {
         showToast('Nenhum PDF disponível', 'error');
         return;
     }
     try {
-        const blob = new Blob([currentPdfData], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `latex-document-${timestamp}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        showToast(`PDF baixado`, 'success');
+        const dest = await StorageService.exportPdf(mainFile);
+        if (dest) showToast('PDF salvo', 'success');
     } catch (error) {
-        showToast('Erro ao baixar PDF', 'error');
+        console.error(error);
+        showToast(String(error), 'error');
     }
 }
 
 // ========== FILE SYSTEM ==========
-async function initFileSystem() {
-    const currentId = StorageService.getCurrentProjectId();
-    const projectData = currentId ? await StorageService.loadProject(currentId) : null;
+// Toda alteração de arquivo vai direto para o disco; só as edições de texto
+// passam pela fila _dirtyFiles (gravadas com debounce por saveCurrentProject).
 
-    if (projectData) {
-        projectFiles = projectData.files;
-        currentFile = projectData.currentFile;
-        if (projectFiles[currentFile] && projectFiles[currentFile].content) {
-            editor.setValue(projectFiles[currentFile].content);
-        }
-    } else {
-        // Carrega template padrão do banco ou usa fallback
-        const template = await loadDefaultTemplate();
-        projectFiles['main.tex'].content = template;
-        editor.setValue(template);
+async function initFileSystem(projectPath) {
+    const info = await StorageService.openProject(projectPath);
+    projectRoot = info.root;
+    _projectName = info.name;
+    mainFile = info.mainFile;
+    projectEngine = info.engine || 'pdflatex';
+    projectFiles = await StorageService.loadProjectFiles(info);
+    _dirtyFiles = new Set();
+
+    document.title = `${_projectName} - CarameloTeX`;
+    const nameEl = document.getElementById('projectName');
+    if (nameEl) {
+        nameEl.textContent = _projectName;
+        nameEl.title = projectRoot;
     }
 
-    // Reset dirty tracking after load
-    _dirtyFiles = new Set();
-    _deletedFiles = new Set();
-    _offlineSavePending = false;
-
-    // Cache project name
-    const projects = await StorageService.listProjects();
-    const meta = projects.find(p => p.id === currentId);
-    if (meta) _projectName = meta.name;
+    // Abre o arquivo principal (ou o primeiro .tex) no editor
+    const firstText = Object.keys(projectFiles).sort().find(p => isTextFile(projectFiles[p]));
+    currentFile = mainFile && projectFiles[mainFile] ? mainFile : firstText || null;
+    editor.setValue(currentFile ? projectFiles[currentFile].content : '');
+    editor.clearHistory();
 
     renderFileList();
-    console.log('Sistema de arquivos inicializado');
+    console.log(`Projeto aberto: ${projectRoot} (principal: ${mainFile || 'nenhum'})`);
+}
+
+/** Relê a pasta do disco (após importar arquivos), mantendo o arquivo aberto. */
+async function reloadProject() {
+    await saveCurrentProject();
+    const previous = currentFile;
+    await initFileSystem(projectRoot);
+    if (previous && previous !== currentFile && isTextFile(projectFiles[previous])) {
+        selectFile(previous);
+    }
 }
 
 function toggleFilesPanel() {
@@ -1329,11 +1160,15 @@ function toggleFilesPanel() {
     panel.classList.toggle('hidden');
 }
 
-function createFolder(parentPath = '') {
+function isValidName(name) {
+    return name && !/[\\/:*?"<>|]/.test(name) && name !== '.' && name !== '..';
+}
+
+async function createFolder(parentPath = '') {
     const folderName = prompt("Nome da nova pasta:", "Nova Pasta");
     if (!folderName) return;
 
-    if (folderName.includes('/') || folderName.includes('\\')) {
+    if (!isValidName(folderName)) {
         showToast('Nome inválido', 'error');
         return;
     }
@@ -1345,85 +1180,88 @@ function createFolder(parentPath = '') {
         return;
     }
 
-    projectFiles[fullPath] = { type: 'folder' };
-    _dirtyFiles.add(fullPath);
-    renderFileList();
-    showToast(`Pasta '${folderName}' criada!`, 'success');
-}
-
-function addFile(filename, content, type = 'auxiliary') {
-    if (projectFiles[filename]) {
-        // Se já existe, pergunta se quer sobrescrever (exceto main se for protegido)
-        if (filename === 'main.tex') {
-            // Ignora silenciosamente se for inicialização, mas alerta upload
-            // Por simplificação: sobrescreve
-        }
-        // showToast(`Substituindo ${filename}...`, 'info');
+    try {
+        await StorageService.createFolder(fullPath);
+        projectFiles[fullPath] = { type: 'folder' };
+        renderFileList();
+        showToast(`Pasta '${folderName}' criada!`, 'success');
+    } catch (e) {
+        showToast(String(e), 'error');
     }
-
-    projectFiles[filename] = {
-        content: content,
-        type: type
-    };
-    _dirtyFiles.add(filename);
-
-    renderFileList();
-    showToast(`Arquivo salvo: ${filename.split('/').pop()}`, 'success');
 }
 
-function removeItem(path) {
-    if (path === 'main.tex') {
+/**
+ * Grava um arquivo novo (ou substitui um existente) no disco.
+ * @param {string} type - 'auxiliary' (texto) ou 'binary' (content = base64)
+ */
+async function addFile(filename, content, type = 'auxiliary') {
+    try {
+        if (type === 'binary') {
+            await StorageService.writeBinary(filename, content);
+            projectFiles[filename] = { type: 'binary', content: null };
+        } else {
+            await StorageService.writeText(filename, content);
+            projectFiles[filename] = { type: filename === mainFile ? 'main' : 'auxiliary', content };
+            if (filename === currentFile) editor.setValue(content);
+        }
+        renderFileList();
+        showToast(`Arquivo salvo: ${filename.split('/').pop()}`, 'success');
+    } catch (e) {
+        showToast(String(e), 'error');
+    }
+}
+
+async function removeItem(path) {
+    if (path === mainFile) {
         showToast('Não é possível remover o arquivo principal!', 'error');
         return;
     }
 
-    const msg = projectFiles[path].type === 'folder'
-        ? `Excluir pasta '${path}' e todo o conteúdo?`
-        : `Excluir arquivo '${path}'?`;
-
+    const isFolder = projectFiles[path].type === 'folder';
+    const msg = isFolder
+        ? `Mover a pasta '${path}' e todo o conteúdo para a Lixeira?`
+        : `Mover '${path}' para a Lixeira?`;
     if (!confirm(msg)) return;
 
-    if (projectFiles[path].type === 'folder') {
-        const prefix = path + '/';
-        Object.keys(projectFiles).forEach(key => {
-            if (key.startsWith(prefix) || key === path) {
-                _deletedFiles.add(key);
-                _dirtyFiles.delete(key);
-                delete projectFiles[key];
-            }
-        });
-    } else {
-        _deletedFiles.add(path);
-        _dirtyFiles.delete(path);
-        delete projectFiles[path];
-    }
-
-    // Reset editor se o arquivo atual sumiu
-    if (currentFile === path || currentFile.startsWith(path + '/')) {
-        currentFile = 'main.tex';
-        editor.setValue(projectFiles['main.tex'].content);
-    }
-
-    renderFileList();
-    showToast('Removido com sucesso', 'success');
-}
-
-function renameItem(path) {
-    if (path === 'main.tex') {
-        showToast('Não é possível renomear o arquivo principal!', 'error');
+    if (isFolder && mainFile && mainFile.startsWith(path + '/')) {
+        showToast('A pasta contém o arquivo principal', 'error');
         return;
     }
 
+    try {
+        await StorageService.remove(path);
+    } catch (e) {
+        showToast(String(e), 'error');
+        return;
+    }
+
+    Object.keys(projectFiles).forEach(key => {
+        if (key === path || key.startsWith(path + '/')) {
+            _dirtyFiles.delete(key);
+            delete projectFiles[key];
+        }
+    });
+
+    // Volta para o principal se o arquivo aberto sumiu
+    if (currentFile && (currentFile === path || currentFile.startsWith(path + '/'))) {
+        currentFile = mainFile;
+        editor.setValue(mainFile ? projectFiles[mainFile].content : '');
+    }
+
+    renderFileList();
+    showToast('Movido para a Lixeira', 'success');
+}
+
+async function renameItem(path) {
     const currentName = path.split('/').pop();
     const newName = prompt("Novo nome:", currentName);
 
     if (!newName || newName === currentName) return;
-    if (newName.includes('/') || newName.includes('\\')) {
+    if (!isValidName(newName)) {
         showToast('Nome inválido', 'error');
         return;
     }
 
-    // Calcula novo path base
     const parentPath = path.substring(0, path.lastIndexOf('/'));
     const newPath = parentPath ? `${parentPath}/${newName}` : newName;
 
@@ -1432,92 +1270,68 @@ function renameItem(path) {
         return;
     }
 
-    // Renomear
-    if (projectFiles[path].type === 'folder') {
-        const oldPrefix = path + '/';
-        const newPrefix = newPath + '/';
+    // Grava edições pendentes antes de mover o arquivo no disco
+    await saveCurrentProject();
+    try {
+        await StorageService.rename(path, newPath);
+    } catch (e) {
+        showToast(String(e), 'error');
+        return;
+    }
 
-        projectFiles[newPath] = projectFiles[path];
-        _deletedFiles.add(path);
-        _dirtyFiles.add(newPath);
-        delete projectFiles[path];
-
-        Object.keys(projectFiles).forEach(key => {
-            if (key.startsWith(oldPrefix)) {
-                const suffix = key.substring(oldPrefix.length);
-                const childNewPath = newPrefix + suffix;
-                projectFiles[childNewPath] = projectFiles[key];
-                _deletedFiles.add(key);
-                _dirtyFiles.add(childNewPath);
-                delete projectFiles[key];
-            }
-        });
-    } else {
-        projectFiles[newPath] = projectFiles[path];
-        _deletedFiles.add(path);
-        _dirtyFiles.add(newPath);
-        delete projectFiles[path];
-
-        if (currentFile === path) {
-            currentFile = newPath;
+    const movePath = (oldKey) => newPath + oldKey.substring(path.length);
+    Object.keys(projectFiles).forEach(key => {
+        if (key === path || key.startsWith(path + '/')) {
+            projectFiles[movePath(key)] = projectFiles[key];
+            delete projectFiles[key];
         }
+    });
+    if (currentFile && (currentFile === path || currentFile.startsWith(path + '/'))) {
+        currentFile = movePath(currentFile);
+    }
+    if (mainFile && (mainFile === path || mainFile.startsWith(path + '/'))) {
+        mainFile = movePath(mainFile);
+        await StorageService.saveConfig(mainFile, projectEngine).catch(console.error);
     }
 
     renderFileList();
     showToast('Renomeado com sucesso', 'success');
 }
 
-function downloadItem(path) {
-    const file = projectFiles[path];
-    if (!file || file.type === 'folder') return;
-
-    let blob;
-    if (file.type === 'binary') {
-        // Base64 to Blob
-        const byteCharacters = atob(file.content.split(',')[1]);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        blob = new Blob([byteArray]);
-    } else {
-        blob = new Blob([file.content], { type: 'text/plain' });
+async function setMainFile(path) {
+    if (mainFile && projectFiles[mainFile]) projectFiles[mainFile].type = 'auxiliary';
+    mainFile = path;
+    projectFiles[path].type = 'main';
+    try {
+        await StorageService.saveConfig(mainFile, projectEngine);
+    } catch (e) {
+        showToast(String(e), 'error');
     }
+    renderFileList();
+    showToast(`Arquivo principal: ${path}`, 'success');
+    compile();
+}
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = path.split('/').pop();
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+function revealItem(path) {
+    StorageService.revealInExplorer(projectRoot, path).catch(e => showToast(String(e), 'error'));
 }
 
 function selectFile(filename) {
-    if (!projectFiles[filename]) return;
-    if (projectFiles[filename].type === 'folder') return;
+    const file = projectFiles[filename];
+    if (!file || file.type === 'folder') return;
 
-    if (projectFiles[filename].type === 'binary') {
-        showToast('Arquivo binário (não editável)', 'info');
-        currentFile = filename;
-        renderFileList();
+    if (!isTextFile(file)) {
+        showToast('Arquivo binário (não editável) — use "Mostrar no Explorer"', 'info');
         return;
     }
 
-    // Salva conteúdo anterior se era editável
-    const prevFile = projectFiles[currentFile];
-    if (prevFile && prevFile.type !== 'folder' && prevFile.type !== 'binary') {
-        const editorContent = getEditorContent();
-        if (prevFile.content !== editorContent) {
-            prevFile.content = editorContent;
-            _dirtyFiles.add(currentFile);
-        }
-    }
+    // Guarda o conteúdo do arquivo anterior
+    syncEditorToCurrentFile();
 
     currentFile = filename;
-    editor.setValue(projectFiles[filename].content);
+    editor.setValue(file.content);
+    editor.clearHistory();
+    highlightErrors(lastLogEntries);
     renderFileList();
 }
 
@@ -1566,7 +1380,7 @@ function renderFileList() {
             const child = node.children[key];
             const isFolder = child.type === 'folder';
             const isActive = child.path === currentFile;
-            const isMain = child.type === 'main';
+            const isMain = child.path === mainFile;
 
             const itemDiv = document.createElement('div');
             const paddingLeft = level * 12 + 8;
@@ -1633,23 +1447,24 @@ function showActionMenu(event, path) {
     actionMenuTarget = path;
     const file = projectFiles[path];
     const isFolder = file.type === 'folder';
-    const isMain = file.type === 'main';
+    const isMain = path === mainFile;
 
     let optionsInfo = [];
 
     // Define options
     if (isFolder) {
         optionsInfo.push({ label: 'Nova Pasta', icon: 'M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z', action: 'CREATE_FOLDER' });
-        optionsInfo.push({ label: 'Upload Arquivo', icon: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12', action: 'UPLOAD' });
+        optionsInfo.push({ label: 'Adicionar Arquivo', icon: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12', action: 'UPLOAD' });
         optionsInfo.push({ separator: true });
-    } else {
-        optionsInfo.push({ label: 'Download', icon: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4', action: 'DOWNLOAD' });
+    } else if (!isMain && /\.tex$/i.test(path) && isTextFile(file)) {
+        optionsInfo.push({ label: 'Definir como principal', icon: 'M5 13l4 4L19 7', action: 'SET_MAIN' });
     }
+    optionsInfo.push({ label: 'Mostrar no Explorer', icon: 'M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14', action: 'REVEAL' });
 
     // Common
+    optionsInfo.push({ label: 'Renomear', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', action: 'RENAME' });
     if (!isMain) {
-        optionsInfo.push({ label: 'Renomear', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', action: 'RENAME' });
-        optionsInfo.push({ label: 'Excluir', icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16', action: 'DELETE', color: 'text-red-400' });
+        optionsInfo.push({ label: 'Mover para a Lixeira', icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16', action: 'DELETE', color: 'text-red-400' });
     }
 
     // Build menu DOM (avoid inline onclick)
@@ -1716,8 +1531,11 @@ function handleMenuAction(action) {
         case 'DELETE':
             removeItem(path);
             break;
-        case 'DOWNLOAD':
-            downloadItem(path);
+        case 'REVEAL':
+            revealItem(path);
+            break;
+        case 'SET_MAIN':
+            setMainFile(path);
             break;
     }
 }
@@ -1732,27 +1550,24 @@ function getFileIcon(extension) {
     return icons[extension] || icons['tex'];
 }
 
+const UPLOAD_TEXT_EXTS = /\.(tex|bib|sty|cls|bst|bbx|cbx|def|cfg|txt|md|csv|dat|json)$/i;
+
 function handleFileUpload(files, targetPath = '') {
     Array.from(files).forEach(file => {
         const reader = new FileReader();
+        const fullPath = targetPath ? `${targetPath}/${file.name}` : file.name;
+        const isText = UPLOAD_TEXT_EXTS.test(file.name);
 
         reader.onload = function (e) {
-            const content = e.target.result;
-            const originalName = file.name;
-            // Combina path se existir
-            const fullPath = targetPath ? `${targetPath}/${originalName}` : originalName;
-
-            if (originalName.match(/\.(tex|bib|sty|cls)$/)) {
-                addFile(fullPath, content, 'auxiliary');
-            }
-            else if (originalName.match(/\.(png|jpg|jpeg|pdf|eps)$/)) {
-                addFile(fullPath, content, 'binary');
+            if (isText) {
+                addFile(fullPath, e.target.result, 'auxiliary');
             } else {
-                showToast(`Tipo não suportado: ${originalName}`, 'error');
+                // dataURL -> só o base64
+                addFile(fullPath, e.target.result.split(',')[1] || '', 'binary');
             }
         };
 
-        if (file.name.match(/\.(tex|bib|sty|cls)$/)) {
+        if (isText) {
             reader.readAsText(file);
         } else {
             reader.readAsDataURL(file);
@@ -1762,158 +1577,20 @@ function handleFileUpload(files, targetPath = '') {
 
 // ========== ZIP UPLOAD ==========
 async function handleZipUpload(file) {
-    if (!file.name.endsWith('.zip')) {
+    if (!file.name.toLowerCase().endsWith('.zip')) {
         showToast('Por favor, selecione um arquivo .zip', 'error');
+        return;
+    }
+    if (!confirm(`Extrair "${file.name}" para dentro da pasta do projeto?\nArquivos com o mesmo nome serão substituídos.`)) {
         return;
     }
 
     showToast('Extraindo arquivos do ZIP...', 'info');
-
     try {
-        const zip = await JSZip.loadAsync(file);
-
-        let filesAdded = 0;
-        let filesSkipped = 0;
-        let mainTexFound = false;
-
-        // Detecta se há uma pasta raiz única no ZIP (comum em exports do Overleaf)
-        const allPaths = Object.keys(zip.files);
-        let rootPrefix = '';
-
-        // Verifica se todos os arquivos estão dentro de uma única pasta
-        const topLevelItems = new Set();
-        allPaths.forEach(path => {
-            const firstPart = path.split('/')[0];
-            if (firstPart) topLevelItems.add(firstPart);
-        });
-
-        if (topLevelItems.size === 1) {
-            const singleRoot = Array.from(topLevelItems)[0];
-            // Verifica se é uma pasta (tem arquivos dentro)
-            const hasFilesInside = allPaths.some(p => p.startsWith(singleRoot + '/') && !zip.files[p].dir);
-            if (hasFilesInside) {
-                rootPrefix = singleRoot + '/';
-                console.log(`📦 Detectada pasta raiz: ${singleRoot}`);
-            }
-        }
-
-        // Processa cada arquivo no ZIP
-        const promises = [];
-
-        zip.forEach((relativePath, zipEntry) => {
-            // Ignora diretórios
-            if (zipEntry.dir) return;
-
-            // Remove o prefixo da pasta raiz se existir
-            let finalPath = relativePath;
-            if (rootPrefix && relativePath.startsWith(rootPrefix)) {
-                finalPath = relativePath.substring(rootPrefix.length);
-            }
-
-            // Ignora arquivos ocultos e de sistema
-            if (finalPath.startsWith('.') || finalPath.startsWith('__MACOSX')) {
-                filesSkipped++;
-                return;
-            }
-
-            // Ignora arquivos auxiliares de compilação
-            if (finalPath.match(/\.(aux|log|out|toc|lof|lot|bbl|blg|synctex\.gz|fdb_latexmk|fls)$/)) {
-                filesSkipped++;
-                return;
-            }
-
-            const fileName = finalPath.split('/').pop().toLowerCase();
-            const ext = fileName.split('.').pop();
-
-            // Determina o tipo de arquivo
-            const isText = ['tex', 'bib', 'sty', 'cls', 'txt', 'md', 'bst'].includes(ext);
-            const isBinary = ['png', 'jpg', 'jpeg', 'pdf', 'eps', 'gif', 'svg'].includes(ext);
-
-            if (!isText && !isBinary) {
-                filesSkipped++;
-                return;
-            }
-
-            const promise = (async () => {
-                try {
-                    if (isText) {
-                        const content = await zipEntry.async('string');
-
-                        // Detecta se é o arquivo principal
-                        let fileType = 'auxiliary';
-                        if (ext === 'tex') {
-                            // Verifica se é um arquivo principal (tem \documentclass)
-                            if (content.includes('\\documentclass') && !mainTexFound) {
-                                // Se é main.tex ou é o primeiro com \documentclass
-                                if (fileName === 'main.tex' || !mainTexFound) {
-                                    fileType = 'main';
-                                    mainTexFound = true;
-
-                                    // Se não é main.tex, renomeia para main.tex
-                                    if (fileName !== 'main.tex') {
-                                        console.log(`📄 Arquivo principal detectado: ${finalPath}`);
-                                        // Mantém o arquivo original também
-                                        projectFiles[finalPath] = { content, type: 'auxiliary' };
-                                        _dirtyFiles.add(finalPath);
-                                    }
-
-                                    // Salva como main.tex
-                                    projectFiles['main.tex'] = { content, type: 'main' };
-                                    _dirtyFiles.add('main.tex');
-                                    filesAdded++;
-                                    return;
-                                }
-                            }
-                        }
-
-                        projectFiles[finalPath] = { content, type: fileType };
-                        _dirtyFiles.add(finalPath);
-                        filesAdded++;
-                    } else if (isBinary) {
-                        const blob = await zipEntry.async('blob');
-                        const reader = new FileReader();
-
-                        await new Promise((resolve, reject) => {
-                            reader.onload = () => {
-                                projectFiles[finalPath] = {
-                                    content: reader.result,
-                                    type: 'binary'
-                                };
-                                _dirtyFiles.add(finalPath);
-                                filesAdded++;
-                                resolve();
-                            };
-                            reader.onerror = reject;
-                            reader.readAsDataURL(blob);
-                        });
-                    }
-                } catch (err) {
-                    console.error(`Erro ao processar ${finalPath}:`, err);
-                    filesSkipped++;
-                }
-            })();
-
-            promises.push(promise);
-        });
-
-        await Promise.all(promises);
-
-        // Atualiza a visualização
-        renderFileList();
-
-        // Se encontrou arquivo principal, carrega no editor
-        if (mainTexFound && projectFiles['main.tex']) {
-            currentFile = 'main.tex';
-            editor.setValue(projectFiles['main.tex'].content);
-        }
-
-        // Salva o projeto
         await saveCurrentProject();
-
-        showToast(`ZIP importado: ${filesAdded} arquivo(s) adicionado(s)${filesSkipped > 0 ? `, ${filesSkipped} ignorado(s)` : ''}`, 'success');
-
-        console.log(`✅ ZIP importado: ${filesAdded} arquivos adicionados, ${filesSkipped} ignorados`);
-
+        const result = await StorageService.importZip(file);
+        await reloadProject();
+        showToast(`ZIP importado: ${result.added} arquivo(s)${result.skipped > 0 ? `, ${result.skipped} ignorado(s)` : ''}`, 'success');
     } catch (error) {
         console.error('Erro ao processar ZIP:', error);
         showToast('Erro ao processar arquivo ZIP', 'error');

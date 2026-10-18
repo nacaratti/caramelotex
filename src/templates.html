@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Biblioteca de Templates - LaTeX Editor</title>
+    <title>Templates - CarameloTeX</title>
 
     <!-- Tailwind CSS -->
     <link rel="stylesheet" href="./styles/tailwind.css">
@@ -19,7 +19,7 @@
     <!-- Header -->
     <header class="bg-latex-dark border-b border-gray-700 px-6 py-4 flex items-center justify-between">
         <div class="flex items-center space-x-4">
-            <a href="projects.html" class="text-2xl font-bold text-latex-green hover:text-teal-400 transition-colors">LaTeX Editor</a>
+            <a href="projects.html" class="text-2xl font-bold text-latex-green hover:text-teal-400 transition-colors">CarameloTeX</a>
             <span class="text-sm text-gray-400">Biblioteca de Templates</span>
         </div>
         <a href="projects.html"
@@ -27,7 +27,7 @@
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
             </svg>
-            <span class="text-sm">Voltar aos Projetos</span>
+            <span class="text-sm">Voltar</span>
         </a>
     </header>
 
@@ -111,8 +111,10 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/js/storage.js"></script>
-    <script src="/js/templates.js"></script>
+    <script type="module" src="./vendor/tauri-bridge.js"></script>
+    <script type="module" src="./vendor/templates-data.js"></script>
+    <script defer src="/js/storage.js"></script>
+    <script defer src="/js/templates.js"></script>
 
     <style>
         .category-btn {

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meus Projetos - LaTeX Editor</title>
+    <title>CarameloTeX</title>
 
     <!-- Tailwind CSS -->
     <link rel="stylesheet" href="./styles/tailwind.css">
@@ -12,118 +12,82 @@
     <!-- Custom Styles (Reuse main.css) -->
     <link rel="stylesheet" href="styles/main.css">
 
+    <script type="module" src="./vendor/tauri-bridge.js"></script>
+    <script type="module" src="./vendor/zip-lib.js"></script>
 </head>
 
 <body class="bg-gray-900 text-gray-100 min-h-screen">
 
     <!-- Header -->
     <header class="bg-latex-dark border-b border-gray-700 px-6 py-4 flex items-center justify-between">
-        <div class="flex items-center space-x-4">
+        <div class="flex items-center space-x-3">
+            <img src="/img/caramelo_login.png" alt="" class="h-10">
             <h1 class="text-2xl font-bold text-latex-green">CarameloTeX</h1>
-            <span class="text-sm text-gray-400">Meus Projetos</span>
         </div>
-        <div class="flex items-center space-x-4">
-            <a id="adminLink" href="admin.html" class="hidden text-gray-400 hover:text-white transition-colors text-sm flex items-center space-x-1">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-                <span>Admin</span>
-            </a>
-            <button id="logoutBtn"
-                class="text-gray-400 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-gray-800 flex items-center space-x-2"
-                title="Sair">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
-                    </path>
-                </svg>
-                <span class="text-sm">Sair</span>
-            </button>
-        </div>
+        <div id="texStatus" class="text-xs text-gray-500"></div>
     </header>
 
     <main class="container mx-auto px-4 py-8 max-w-4xl">
 
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-xl font-semibold text-gray-200">Projetos Recentes</h2>
-            <div class="flex items-center space-x-3">
-                <a href="templates.html"
-                    class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path>
-                    </svg>
-                    <span>Templates</span>
-                </a>
-                <button id="newProjectBtn"
-                    class="bg-latex-green hover:bg-teal-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                    </svg>
-                    <span>Novo Projeto</span>
-                </button>
-            </div>
+        <!-- Ações principais -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
+            <button id="openFolderBtn"
+                class="bg-latex-green hover:bg-teal-600 text-white p-5 rounded-lg font-semibold transition-colors flex flex-col items-center space-y-2">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"></path>
+                </svg>
+                <span>Abrir pasta</span>
+            </button>
+            <a href="templates.html"
+                class="bg-gray-700 hover:bg-gray-600 text-white p-5 rounded-lg font-semibold transition-colors flex flex-col items-center space-y-2">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                </svg>
+                <span>Novo projeto</span>
+            </a>
+            <button id="importZipBtn"
+                class="bg-gray-700 hover:bg-gray-600 text-white p-5 rounded-lg font-semibold transition-colors flex flex-col items-center space-y-2">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                </svg>
+                <span>Importar ZIP</span>
+            </button>
+            <input type="file" id="zipInput" accept=".zip" class="hidden">
         </div>
 
-        <!-- Loading Skeleton -->
-        <div id="projectsLoading" class="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
-            <div class="divide-y divide-gray-700">
-                <div class="p-4 animate-pulse flex items-center justify-between">
-                    <div class="flex items-center space-x-4">
-                        <div class="w-10 h-10 bg-gray-700 rounded"></div>
-                        <div>
-                            <div class="h-4 bg-gray-700 rounded w-48 mb-2"></div>
-                            <div class="h-3 bg-gray-700 rounded w-32"></div>
-                        </div>
-                    </div>
-                    <div class="h-8 bg-gray-700 rounded w-20"></div>
-                </div>
-                <div class="p-4 animate-pulse flex items-center justify-between">
-                    <div class="flex items-center space-x-4">
-                        <div class="w-10 h-10 bg-gray-700 rounded"></div>
-                        <div>
-                            <div class="h-4 bg-gray-700 rounded w-40 mb-2"></div>
-                            <div class="h-3 bg-gray-700 rounded w-28"></div>
-                        </div>
-                    </div>
-                    <div class="h-8 bg-gray-700 rounded w-20"></div>
-                </div>
-                <div class="p-4 animate-pulse flex items-center justify-between">
-                    <div class="flex items-center space-x-4">
-                        <div class="w-10 h-10 bg-gray-700 rounded"></div>
-                        <div>
-                            <div class="h-4 bg-gray-700 rounded w-56 mb-2"></div>
-                            <div class="h-3 bg-gray-700 rounded w-36"></div>
-                        </div>
-                    </div>
-                    <div class="h-8 bg-gray-700 rounded w-20"></div>
-                </div>
-            </div>
-        </div>
+        <h2 class="text-xl font-semibold text-gray-200 mb-4">Projetos recentes</h2>
 
-        <!-- Projects List -->
+        <!-- Lista de recentes -->
         <div id="projectsList" class="hidden bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
-            <div id="projectsListContent" class="divide-y divide-gray-700">
-                <!-- Populated by JS -->
-            </div>
+            <div id="projectsListContent" class="divide-y divide-gray-700"></div>
         </div>
 
-        <!-- Empty State -->
-        <div id="emptyState" class="hidden text-center py-20">
-            <svg class="w-20 h-20 text-gray-700 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
-                </path>
-            </svg>
-            <p class="text-gray-500 text-lg">Nenhum projeto encontrado.</p>
-            <button id="emptyCreateBtn" class="mt-4 text-latex-green hover:underline">Criar meu primeiro
-                projeto</button>
+        <!-- Vazio -->
+        <div id="emptyState" class="hidden text-center py-16 text-gray-500">
+            <p class="text-lg">Nenhum projeto aberto ainda.</p>
+            <p class="text-sm mt-2">Abra uma pasta com arquivos .tex ou crie um projeto a partir de um template.</p>
         </div>
 
     </main>
 
+    <!-- Preparação do LaTeX na primeira execução -->
+    <div id="setupOverlay" class="hidden fixed inset-0 bg-gray-900 bg-opacity-95 z-50 flex items-center justify-center">
+        <div class="text-center max-w-md px-6">
+            <img src="/img/caramelo_loading.png" alt="" class="h-32 mx-auto mb-6">
+            <p class="text-gray-200 text-lg mb-2">Preparando o LaTeX pela primeira vez...</p>
+            <p class="text-gray-500 text-sm mb-4">Isso só acontece uma vez e pode levar alguns minutos.</p>
+            <div class="w-full bg-gray-700 rounded-full h-2">
+                <div id="setupProgress" class="bg-latex-green h-2 rounded-full transition-all" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
     <!-- Scripts -->
-    <script src="/js/storage.js"></script>
+    <script defer src="/js/storage.js"></script>
     <script>
         function escapeHtml(str) {
             if (typeof str !== 'string') return '';
@@ -135,62 +99,65 @@
                 .replace(/'/g, '&#039;');
         }
 
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type} text-sm font-medium`;
+            toast.textContent = message;
+            document.getElementById('toastContainer').appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+
+        // Scripts com defer e módulos rodam antes do DOMContentLoaded.
         document.addEventListener('DOMContentLoaded', async () => {
-            // Auth guard
-            const session = await AuthService.requireAuth();
-            if (!session) return;
-
-            // Check if admin and show link
-            checkAdminLink();
-
-            // Logout
-            document.getElementById('logoutBtn').addEventListener('click', () => AuthService.signOut());
-
-            // New project buttons
-            document.getElementById('newProjectBtn').addEventListener('click', () => createNewProject());
-            document.getElementById('emptyCreateBtn').addEventListener('click', () => createNewProject());
+            document.getElementById('openFolderBtn').addEventListener('click', openFolder);
+            document.getElementById('importZipBtn').addEventListener('click', () => document.getElementById('zipInput').click());
+            document.getElementById('zipInput').addEventListener('change', (e) => {
+                if (e.target.files.length > 0) importZip(e.target.files[0]);
+                e.target.value = '';
+            });
 
             await renderProjects();
+            await prepareTex();
         });
 
-        async function checkAdminLink() {
+        async function prepareTex() {
+            const status = document.getElementById('texStatus');
+            const overlay = document.getElementById('setupOverlay');
+            const bar = document.getElementById('setupProgress');
             try {
-                const isAdmin = await AuthService.isAdmin();
-                if (isAdmin) {
-                    document.getElementById('adminLink').classList.remove('hidden');
-                }
+                const tex = await StorageService.prepareTex((done, total) => {
+                    overlay.classList.remove('hidden');
+                    bar.style.width = `${Math.round((done / total) * 100)}%`;
+                });
+                const labels = { bundled: 'LaTeX embutido (TinyTeX)', system: 'LaTeX do sistema', custom: 'LaTeX configurado' };
+                status.textContent = tex ? labels[tex.source] || tex.source : 'Nenhum LaTeX encontrado';
+                status.className = tex ? 'text-xs text-gray-500' : 'text-xs text-red-400';
+                status.title = tex ? tex.binDir : 'Reinstale o CarameloTeX ou instale o MiKTeX/TeX Live.';
             } catch (e) {
-                // Ignore
+                status.textContent = 'Erro ao preparar o LaTeX';
+                status.className = 'text-xs text-red-400';
+                status.title = String(e);
+                console.error(e);
+            } finally {
+                overlay.classList.add('hidden');
             }
         }
 
         async function renderProjects() {
-            const projects = await StorageService.listProjects();
-
-            // Hide skeleton
-            const skeleton = document.getElementById('projectsLoading');
-            if (skeleton) skeleton.classList.add('hidden');
-
+            const projects = await StorageService.listRecent();
             const list = document.getElementById('projectsList');
             const listContent = document.getElementById('projectsListContent');
             const emptyState = document.getElementById('emptyState');
 
             listContent.innerHTML = '';
-
-            if (projects.length === 0) {
-                list.classList.add('hidden');
-                emptyState.classList.remove('hidden');
-                return;
-            }
-
-            list.classList.remove('hidden');
-            emptyState.classList.add('hidden');
+            list.classList.toggle('hidden', projects.length === 0);
+            emptyState.classList.toggle('hidden', projects.length > 0);
 
             projects.forEach(project => {
                 const row = document.createElement('div');
                 row.className = 'p-4 hover:bg-gray-700/50 transition-colors cursor-pointer group flex items-center justify-between';
 
-                const date = new Date(project.lastModified).toLocaleDateString('pt-BR', {
+                const date = new Date(project.lastOpened).toLocaleDateString('pt-BR', {
                     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
                 });
 
@@ -198,23 +165,24 @@
                     <div class="flex items-center space-x-4 flex-1 min-w-0">
                         <div class="p-2 bg-latex-gray rounded-lg flex-shrink-0">
                             <svg class="w-6 h-6 text-latex-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
                             </svg>
                         </div>
                         <div class="min-w-0 flex-1">
                             <h3 class="text-gray-200 font-medium truncate project-name"></h3>
-                            <p class="text-sm text-gray-500">Editado em ${escapeHtml(date)}</p>
+                            <p class="text-xs text-gray-500 truncate project-path"></p>
+                            <p class="text-xs text-gray-600">Aberto em ${escapeHtml(date)}</p>
                         </div>
                     </div>
                     <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
-                        <button class="rename-btn text-gray-500 hover:text-blue-400 p-2 opacity-0 group-hover:opacity-100 transition-all rounded hover:bg-gray-600" title="Renomear">
+                        <button class="reveal-btn text-gray-500 hover:text-blue-400 p-2 opacity-0 group-hover:opacity-100 transition-all rounded hover:bg-gray-600" title="Mostrar no Explorer">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
                             </svg>
                         </button>
-                        <button class="delete-btn text-gray-500 hover:text-red-400 p-2 opacity-0 group-hover:opacity-100 transition-all rounded hover:bg-gray-600" title="Excluir">
+                        <button class="remove-btn text-gray-500 hover:text-red-400 p-2 opacity-0 group-hover:opacity-100 transition-all rounded hover:bg-gray-600" title="Remover da lista (não apaga a pasta)">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
                         </button>
                         <button class="open-btn bg-latex-green hover:bg-teal-600 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors">
@@ -223,78 +191,64 @@
                     </div>
                 `;
 
-                // Set project name safely via textContent (prevents XSS)
                 const h3 = row.querySelector('.project-name');
                 h3.textContent = project.name;
-                h3.title = project.name;
+                const pathEl = row.querySelector('.project-path');
+                pathEl.textContent = project.path;
+                pathEl.title = project.path;
 
-                // Bind events via addEventListener (no inline onclick with user data)
-                row.querySelector('.rename-btn').addEventListener('click', (e) => {
+                row.querySelector('.reveal-btn').addEventListener('click', (e) => {
                     e.stopPropagation();
-                    renameProjectUI(project.id, project.name);
+                    StorageService.revealInExplorer(project.path, '').catch(err => showToast(String(err), 'error'));
                 });
-
-                row.querySelector('.delete-btn').addEventListener('click', (e) => {
+                row.querySelector('.remove-btn').addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    deleteProject(project.id);
+                    await StorageService.removeRecent(project.path);
+                    await renderProjects();
                 });
-
                 row.querySelector('.open-btn').addEventListener('click', (e) => {
                     e.stopPropagation();
-                    openProject(project.id);
+                    openProject(project.path);
                 });
-
-                // Make whole row clickable
-                row.addEventListener('click', (e) => {
-                    if (!e.target.closest('button')) {
-                        openProject(project.id);
-                    }
-                });
+                row.addEventListener('click', () => openProject(project.path));
 
                 listContent.appendChild(row);
             });
         }
 
-        async function createNewProject() {
-            const name = prompt('Nome do Projeto:', 'Novo Projeto');
-            if (!name) return;
-
-            const btn = document.getElementById('newProjectBtn');
-            btn.disabled = true;
-            btn.querySelector('span').textContent = 'Criando...';
-
+        async function openProject(path) {
             try {
-                const id = await StorageService.createProject(name);
-                openProject(id);
+                await StorageService.openProject(path);
+                window.location.href = 'index.html';
             } catch (e) {
-                console.error('Erro ao criar projeto:', e);
-                btn.disabled = false;
-                btn.querySelector('span').textContent = 'Novo Projeto';
+                console.error(e);
+                if (confirm(`Não foi possível abrir a pasta:\n${e}\n\nRemover dos projetos recentes?`)) {
+                    await StorageService.removeRecent(path);
+                    await renderProjects();
+                }
             }
         }
 
-        function openProject(id) {
-            StorageService.setCurrentProjectId(id);
-            window.location.href = 'index.html';
+        async function openFolder() {
+            const path = await StorageService.pickFolder('Abrir pasta do projeto LaTeX');
+            if (path) await openProject(path);
         }
 
-        async function deleteProject(id) {
-            if (!confirm('Tem certeza que deseja excluir este projeto?')) return;
+        async function importZip(file) {
+            const name = prompt('Nome da pasta do novo projeto:', file.name.replace(/\.zip$/i, ''));
+            if (!name) return;
+            const parent = await StorageService.pickFolder('Onde criar a pasta do projeto?');
+            if (!parent) return;
 
-            document.querySelectorAll('.delete-btn').forEach(b => b.disabled = true);
-
-            await StorageService.deleteProject(id);
-            await renderProjects();
-        }
-
-        async function renameProjectUI(id, currentName) {
-            const newName = prompt('Novo nome do projeto:', currentName);
-            if (!newName || newName === currentName) return;
-
-            document.querySelectorAll('.rename-btn').forEach(b => b.disabled = true);
-
-            await StorageService.renameProject(id, newName);
-            await renderProjects();
+            try {
+                await StorageService.createProject(parent, name, {});
+                const result = await StorageService.importZip(file);
+                showToast(`${result.added} arquivo(s) importado(s)`, 'success');
+                window.location.href = 'index.html';
+            } catch (e) {
+                console.error(e);
+                showToast(`Erro ao importar: ${e}`, 'error');
+            }
         }
     </script>
 </body>

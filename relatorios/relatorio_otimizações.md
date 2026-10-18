@@ -1003,7 +1003,6 @@ channel.onmessage = (e) => {
 
 **Impacto:**
 - Limitação para uso colaborativo
-- Concorrência com Overleaf
 
 **Solução Proposta:**
 - Usar Supabase Realtime (já disponível)

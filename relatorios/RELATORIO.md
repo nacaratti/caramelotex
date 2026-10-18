@@ -142,5 +142,5 @@ Com base na análise do código, sugerem-se as seguintes melhorias:
 *   **Segurança:** Reforçar a sanitização dos inputs no servidor Python para evitar injeção de comandos via shell escapes do LaTeX (ex: `\write18`).
 
 ### 5.4. Novos Recursos
-*   **Colaboração em Tempo Real:** Utilizar o Supabase Realtime para permitir que dois usuários editem o mesmo documento simultaneamente (semelhante ao Overleaf).
+*   **Colaboração em Tempo Real:** Utilizar o Supabase Realtime para permitir que dois usuários editem o mesmo documento simultaneamente.
 *   **Histórico de Versões:** Implementar um sistema de "snapshots" no `storage.js` para permitir reverter o projeto para estados anteriores.

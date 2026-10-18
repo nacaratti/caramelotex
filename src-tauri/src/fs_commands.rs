@@ -320,6 +320,30 @@ pub fn save_project_config(
     write_atomic(&root.join(CONFIG_FILE), json.as_bytes())
 }
 
+/// Copia o PDF gerado para o local escolhido pelo usuário no diálogo "Salvar como".
+#[tauri::command]
+pub fn export_pdf(main_file: String, dest: String, state: State<'_, AppState>) -> Result<(), String> {
+    let root = current_root(&state)?;
+    let main = resolve_in_root(&root, &main_file)?;
+    let stem = main
+        .file_stem()
+        .ok_or("Arquivo principal inválido")?
+        .to_string_lossy()
+        .into_owned();
+    let pdf = root.join(BUILD_DIR).join(format!("{stem}.pdf"));
+    if !pdf.is_file() {
+        return Err("Compile o documento antes de exportar o PDF".into());
+    }
+    let dest = PathBuf::from(dest);
+    let is_pdf = dest.extension().is_some_and(|e| e.eq_ignore_ascii_case("pdf"));
+    if !dest.is_absolute() || !is_pdf {
+        return Err("Destino inválido para o PDF".into());
+    }
+    fs::copy(&pdf, &dest)
+        .map(|_| ())
+        .map_err(|e| format!("Erro ao salvar o PDF: {e}"))
+}
+
 /// Cria uma pasta de projeto nova com os arquivos de um template.
 /// `parent` é escolhida pelo usuário no diálogo; `name` vira o nome da pasta.
 #[tauri::command]

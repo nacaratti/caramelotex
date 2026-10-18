@@ -1,47 +1,14 @@
 /**
  * templates.js - Biblioteca de Templates LaTeX
  *
- * Depende de: supabase.js, admin.js (TemplateService)
+ * Depende de: vendor/templates-data.js (window.CARAMELO_TEMPLATES), storage.js
  */
 
-// ========== TEMPLATES DATA (carregado do Supabase) ==========
+// ========== TEMPLATES DATA (embutidos no app) ==========
 let templates = [];
-let templatesLoaded = false;
 
-/**
- * Carrega os templates do Supabase
- * @returns {Promise<Array>} Lista de templates
- */
-async function fetchTemplates() {
-    try {
-        // Usa o TemplateService do admin.js
-        if (typeof TemplateService !== 'undefined') {
-            templates = await TemplateService.listTemplates();
-        } else {
-            // Fallback: busca direta do Supabase
-            const { data, error } = await supabase
-                .from('templates')
-                .select('*')
-                .eq('is_active', true)
-                .order('name', { ascending: true });
-
-            if (error) {
-                console.error('Erro ao carregar templates:', error.message);
-                templates = [];
-            } else {
-                templates = data || [];
-            }
-        }
-
-        templatesLoaded = true;
-        console.log(`✅ ${templates.length} template(s) carregado(s)`);
-        return templates;
-    } catch (e) {
-        console.error('Erro ao buscar templates:', e);
-        templates = [];
-        templatesLoaded = true;
-        return templates;
-    }
+function templateMainContent(template) {
+    return template.files['main.tex'] || Object.values(template.files)[0] || '';
 }
 
 // ========== RENDER FUNCTIONS ==========
@@ -165,7 +132,7 @@ function showPreview(template) {
     currentPreviewTemplate = template;
 
     document.getElementById('modalTitle').textContent = template.name;
-    document.getElementById('modalCode').textContent = template.content;
+    document.getElementById('modalCode').textContent = templateMainContent(template);
     document.getElementById('previewModal').classList.remove('hidden');
 }
 
@@ -175,36 +142,24 @@ function hidePreview() {
 }
 
 async function useTemplate(template) {
-    const name = prompt('Nome do novo projeto:', template.name);
+    const name = prompt('Nome da pasta do novo projeto:', template.name);
     if (!name) return;
+    const parent = await StorageService.pickFolder('Onde criar a pasta do projeto?');
+    if (!parent) return;
 
     try {
-        // Create new project with template content
-        const id = await StorageService.createProject(name);
-
-        // Save template content as main.tex
-        const files = {
-            'main.tex': {
-                content: template.content,
-                type: 'main'
-            }
-        };
-
-        await StorageService.saveProject(id, name, files, 'main.tex');
-
-        // Set as current project and redirect to editor
-        StorageService.setCurrentProjectId(id);
+        await StorageService.createProject(parent, name, template.files);
         window.location.href = 'index.html';
     } catch (error) {
         console.error('Erro ao criar projeto:', error);
-        alert('Erro ao criar projeto. Tente novamente.');
+        alert(`Erro ao criar projeto:\n${error}`);
     }
 }
 
 function copyCode() {
     if (!currentPreviewTemplate) return;
 
-    navigator.clipboard.writeText(currentPreviewTemplate.content).then(() => {
+    navigator.clipboard.writeText(templateMainContent(currentPreviewTemplate)).then(() => {
         const btn = document.getElementById('copyCodeBtn');
         const originalText = btn.innerHTML;
         btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Copiado!';
@@ -241,73 +196,11 @@ function filterTemplates() {
     renderTemplates(filtered);
 }
 
-// ========== LOADING STATE ==========
-
-function showLoadingState() {
-    const grid = document.getElementById('templatesGrid');
-    const emptyState = document.getElementById('emptyState');
-
-    grid.classList.remove('hidden');
-    emptyState.classList.add('hidden');
-
-    grid.innerHTML = `
-        <div class="col-span-full flex justify-center items-center py-12">
-            <div class="flex items-center space-x-3 text-gray-400">
-                <svg class="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span>Carregando templates...</span>
-            </div>
-        </div>
-    `;
-}
-
-// ========== ADMIN LINK ==========
-
-async function checkAdminLink() {
-    try {
-        const isAdmin = await AuthService.isAdmin();
-        if (isAdmin) {
-            // Adiciona link de admin no header se existir
-            const nav = document.querySelector('nav');
-            if (nav) {
-                const adminLink = document.createElement('a');
-                adminLink.href = 'admin.html';
-                adminLink.className = 'text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center space-x-1';
-                adminLink.innerHTML = `
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                    </svg>
-                    <span>Admin</span>
-                `;
-                nav.insertBefore(adminLink, nav.firstChild);
-            }
-        }
-    } catch (e) {
-        // Ignora erro silenciosamente
-    }
-}
-
 // ========== INITIALIZATION ==========
 
-document.addEventListener('DOMContentLoaded', async () => {
-    // Auth guard
-    const session = await AuthService.requireAuth();
-    if (!session) return;
-
-    // Mostra estado de carregamento
-    showLoadingState();
-
-    // Carrega templates do Supabase
-    await fetchTemplates();
-
-    // Render initial templates
+document.addEventListener('DOMContentLoaded', () => {
+    templates = window.CARAMELO_TEMPLATES || [];
     renderTemplates(templates);
-
-    // Verifica se é admin para mostrar link
-    checkAdminLink();
 
     // Category buttons
     document.querySelectorAll('.category-btn').forEach(btn => {
