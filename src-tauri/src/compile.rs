@@ -1,0 +1,328 @@
+//! Compilação local com latexmk (ou, sem latexmk, uma sequência manual
+//! engine → bibtex/biber → engine → engine).
+//!
+//! A resposta mantém o formato do antigo servidor latex-on-http: PDF e
+//! `.synctex.gz` em base64, para o `app.js` continuar usando pako + SyncTexParser.
+
+use std::ffi::OsString;
+use std::fs;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine};
+use serde::Serialize;
+use tauri::{AppHandle, State};
+
+use crate::fs_commands::{current_root, BUILD_DIR};
+use crate::paths::resolve_in_root;
+use crate::tex::{current_install, TexInstall};
+use crate::AppState;
+
+const DEFAULT_TIMEOUT_SECS: u64 = 180;
+
+/// Processo em execução, para o `cancel_compile` conseguir encerrá-lo.
+#[derive(Default)]
+pub struct CompileState {
+    pid: Mutex<Option<u32>>,
+    cancelled: AtomicBool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompileResult {
+    ok: bool,
+    /// PDF em base64 (presente mesmo com erros, se o LaTeX chegou a gerar um)
+    pdf: Option<String>,
+    synctex: Option<String>,
+    /// Conteúdo do .log do LaTeX (ou a saída do processo, se não houver .log)
+    log: String,
+    /// Saída do latexmk/bibtex/biber
+    output: String,
+    engine: String,
+    tex_source: String,
+    duration_ms: u128,
+    cancelled: bool,
+    timed_out: bool,
+}
+
+enum RunEnd {
+    Exited(bool),
+    Cancelled,
+    TimedOut,
+}
+
+struct Job {
+    install: TexInstall,
+    path_env: OsString,
+    bib_dir: PathBuf,
+    state: Arc<CompileState>,
+    deadline: Instant,
+    output: String,
+}
+
+impl Job {
+    /// Executa um programa do TeX acompanhando cancelamento e timeout.
+    fn run(&mut self, tool: &str, args: &[String], cwd: &Path) -> Result<RunEnd, String> {
+        let mut cmd = Command::new(self.install.tool(tool));
+        cmd.args(args)
+            .current_dir(cwd)
+            .env("PATH", &self.path_env)
+            // Deixa bibtex/biber acharem .bib/.bst da pasta do documento
+            // mesmo rodando dentro da pasta de build.
+            .env("BIBINPUTS", join_search_path(&self.bib_dir))
+            .env("BSTINPUTS", join_search_path(&self.bib_dir))
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        self.output.push_str(&format!("$ {tool} {}\n", args.join(" ")));
+        let mut child = cmd.spawn().map_err(|e| format!("Não foi possível executar {tool}: {e}"))?;
+        *self.state.pid.lock().unwrap() = Some(child.id());
+
+        // Lê stdout/stderr em threads para o processo não travar com o buffer cheio.
+        let readers: Vec<_> = [child.stdout.take().map(boxed), child.stderr.take().map(boxed)]
+            .into_iter()
+            .flatten()
+            .map(|mut pipe| {
+                thread::spawn(move || {
+                    let mut buf = Vec::new();
+                    let _ = pipe.read_to_end(&mut buf);
+                    String::from_utf8_lossy(&buf).into_owned()
+                })
+            })
+            .collect();
+
+        let end = loop {
+            if self.state.cancelled.load(Ordering::SeqCst) {
+                kill_tree(&mut child);
+                break RunEnd::Cancelled;
+            }
+            if Instant::now() > self.deadline {
+                kill_tree(&mut child);
+                break RunEnd::TimedOut;
+            }
+            match child.try_wait() {
+                Ok(Some(status)) => break RunEnd::Exited(status.success()),
+                Ok(None) => thread::sleep(Duration::from_millis(50)),
+                Err(e) => return Err(e.to_string()),
+            }
+        };
+        *self.state.pid.lock().unwrap() = None;
+
+        for reader in readers {
+            self.output.push_str(&reader.join().unwrap_or_default());
+        }
+        self.output.push('\n');
+        Ok(end)
+    }
+}
+
+fn boxed<R: Read + Send + 'static>(r: R) -> Box<dyn Read + Send> {
+    Box::new(r)
+}
+
+/// Caminho de busca do kpathsea: a pasta dada + os padrões (separador final).
+fn join_search_path(dir: &Path) -> OsString {
+    let sep = if cfg!(windows) { ";" } else { ":" };
+    let mut s = dir.as_os_str().to_owned();
+    s.push(sep);
+    s
+}
+
+/// No Windows o latexmk (perl) abre o pdflatex como filho: encerra a árvore toda.
+fn kill_tree(child: &mut std::process::Child) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = Command::new("taskkill")
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .creation_flags(0x0800_0000)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn engine_flag(engine: &str) -> Result<&'static str, String> {
+    match engine {
+        "pdflatex" => Ok("-pdf"),
+        "xelatex" => Ok("-xelatex"),
+        "lualatex" => Ok("-lualatex"),
+        other => Err(format!("Compilador não suportado: {other}")),
+    }
+}
+
+fn read_if_newer(path: &Path, since: SystemTime) -> Option<Vec<u8>> {
+    let modified = fs::metadata(path).and_then(|m| m.modified()).ok()?;
+    // Ignora PDF/SyncTeX de uma compilação anterior que falhou antes de gravar.
+    if modified + Duration::from_secs(1) < since {
+        return None;
+    }
+    fs::read(path).ok()
+}
+
+fn compile_blocking(
+    root: PathBuf,
+    main_file: String,
+    engine: String,
+    install: TexInstall,
+    state: Arc<CompileState>,
+    timeout: Duration,
+) -> Result<CompileResult, String> {
+    let started = Instant::now();
+    let started_at = SystemTime::now();
+    engine_flag(&engine)?;
+
+    let main_path = resolve_in_root(&root, &main_file)?;
+    if !main_path.is_file() {
+        return Err(format!("Arquivo principal não encontrado: {main_file}"));
+    }
+    let main_dir = main_path.parent().unwrap_or(&root).to_path_buf();
+    let main_name = main_path.file_name().unwrap().to_string_lossy().into_owned();
+    let stem = main_path.file_stem().unwrap().to_string_lossy().into_owned();
+
+    let outdir = root.join(BUILD_DIR);
+    fs::create_dir_all(&outdir).map_err(|e| format!("Erro ao criar a pasta de build: {e}"))?;
+    let outdir_str = outdir.display().to_string();
+
+    let mut paths = vec![install.bin_dir.clone()];
+    if let Some(existing) = std::env::var_os("PATH") {
+        paths.extend(std::env::split_paths(&existing));
+    }
+    let path_env = std::env::join_paths(paths).map_err(|e| e.to_string())?;
+
+    let mut job = Job {
+        install: install.clone(),
+        path_env,
+        bib_dir: main_dir.clone(),
+        state,
+        deadline: Instant::now() + timeout,
+        output: String::new(),
+    };
+
+    let engine_args = vec![
+        "-synctex=1".to_string(),
+        "-interaction=nonstopmode".to_string(),
+        "-file-line-error".to_string(),
+        format!("-output-directory={outdir_str}"),
+        main_name.clone(),
+    ];
+
+    let end = if install.has_latexmk {
+        let args = vec![
+            engine_flag(&engine)?.to_string(),
+            "-synctex=1".into(),
+            "-interaction=nonstopmode".into(),
+            "-file-line-error".into(),
+            format!("-outdir={outdir_str}"),
+            main_name.clone(),
+        ];
+        job.run("latexmk", &args, &main_dir)?
+    } else {
+        // Sem latexmk (ex.: MiKTeX sem Perl): engine, bibliografia, engine, engine.
+        let mut end = job.run(&engine, &engine_args, &main_dir)?;
+        if matches!(end, RunEnd::Exited(_)) {
+            let aux = fs::read_to_string(outdir.join(format!("{stem}.aux"))).unwrap_or_default();
+            if outdir.join(format!("{stem}.bcf")).is_file() && install.has_tool("biber") {
+                end = job.run("biber", &[stem.clone()], &outdir)?;
+            } else if aux.contains("\\bibdata") && install.has_tool("bibtex") {
+                end = job.run("bibtex", &[stem.clone()], &outdir)?;
+            }
+        }
+        for _ in 0..2 {
+            if !matches!(end, RunEnd::Exited(_)) {
+                break;
+            }
+            end = job.run(&engine, &engine_args, &main_dir)?;
+            let log = fs::read_to_string(outdir.join(format!("{stem}.log"))).unwrap_or_default();
+            if !log.contains("Rerun to get") && !log.contains("Please rerun") {
+                break;
+            }
+        }
+        end
+    };
+
+    let log_bytes = fs::read(outdir.join(format!("{stem}.log"))).unwrap_or_default();
+    let log = if log_bytes.is_empty() {
+        job.output.clone()
+    } else {
+        String::from_utf8_lossy(&log_bytes).into_owned()
+    };
+    let pdf = read_if_newer(&outdir.join(format!("{stem}.pdf")), started_at);
+    let synctex = read_if_newer(&outdir.join(format!("{stem}.synctex.gz")), started_at);
+
+    let (ok, cancelled, timed_out) = match end {
+        RunEnd::Exited(success) => (success && pdf.is_some(), false, false),
+        RunEnd::Cancelled => (false, true, false),
+        RunEnd::TimedOut => (false, false, true),
+    };
+
+    Ok(CompileResult {
+        ok,
+        pdf: pdf.map(|b| B64.encode(b)),
+        synctex: synctex.map(|b| B64.encode(b)),
+        log,
+        output: job.output,
+        engine,
+        tex_source: install.source,
+        duration_ms: started.elapsed().as_millis(),
+        cancelled,
+        timed_out,
+    })
+}
+
+#[tauri::command]
+pub async fn compile_project(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    main_file: String,
+    engine: String,
+    timeout_secs: Option<u64>,
+) -> Result<CompileResult, String> {
+    let root = current_root(&state)?;
+    let install = current_install(&app, &state).ok_or(
+        "Nenhuma distribuição LaTeX encontrada. Reinstale o CarameloTeX ou instale o MiKTeX/TeX Live.",
+    )?;
+
+    // Uma compilação por vez: a nova substitui a anterior.
+    cancel_running(&state.compile);
+    state.compile.cancelled.store(false, Ordering::SeqCst);
+
+    let compile_state = Arc::clone(&state.compile);
+    let timeout = Duration::from_secs(timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS));
+    tauri::async_runtime::spawn_blocking(move || {
+        compile_blocking(root, main_file, engine, install, compile_state, timeout)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn cancel_running(state: &CompileState) {
+    state.cancelled.store(true, Ordering::SeqCst);
+    // Espera o laço de execução perceber o cancelamento e liberar o processo.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while state.pid.lock().unwrap().is_some() && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
+#[tauri::command]
+pub async fn cancel_compile(state: State<'_, AppState>) -> Result<(), String> {
+    let compile_state = Arc::clone(&state.compile);
+    tauri::async_runtime::spawn_blocking(move || cancel_running(&compile_state))
+        .await
+        .map_err(|e| e.to_string())
+}
