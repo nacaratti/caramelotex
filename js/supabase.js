@@ -65,5 +65,41 @@ const AuthService = {
             return null;
         }
         return session;
+    },
+
+    /**
+     * Verifica se o usuário atual é admin.
+     * @returns {Promise<boolean>}
+     */
+    async isAdmin() {
+        try {
+            const { data, error } = await supabase.rpc('is_admin');
+            if (error) {
+                console.error('AuthService.isAdmin error:', error.message);
+                return false;
+            }
+            return data === true;
+        } catch (e) {
+            console.error('AuthService.isAdmin exception:', e);
+            return false;
+        }
+    },
+
+    /**
+     * Obtém o perfil do usuário atual (incluindo role).
+     * @returns {Promise<Object|null>}
+     */
+    async getProfile() {
+        try {
+            const { data, error } = await supabase.rpc('get_my_profile');
+            if (error) {
+                console.error('AuthService.getProfile error:', error.message);
+                return null;
+            }
+            return data?.[0] ?? null;
+        } catch (e) {
+            console.error('AuthService.getProfile exception:', e);
+            return null;
+        }
     }
 };

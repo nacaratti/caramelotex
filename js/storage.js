@@ -13,6 +13,73 @@ const StorageService = {
     _OLD_PROJECTS_META_KEY: 'latex_projects_meta',
     _OLD_PROJECT_PREFIX: 'project_',
 
+    // Fallback default template (usado quando Supabase não está disponível)
+    _FALLBACK_TEMPLATE: `\\documentclass{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage{amsmath}
+\\usepackage{graphicx}
+
+\\title{Meu Documento LaTeX}
+\\author{Autor}
+\\date{\\today}
+
+\\begin{document}
+
+\\maketitle
+
+\\section{Introducao}
+
+Este e um exemplo de documento \\LaTeX{} online.
+
+\\subsection{Formulas Matematicas}
+
+A famosa equacao de Einstein:
+\\[
+E = mc^2
+\\]
+
+\\section{Conclusao}
+
+Compile este documento para visualizar o PDF!
+
+\\end{document}`,
+
+    /**
+     * Obtém o template padrão do Supabase ou retorna fallback local.
+     * @returns {Promise<string>} Conteúdo do template
+     */
+    async getDefaultTemplate() {
+        try {
+            // Tenta buscar do TemplateService se disponível
+            if (typeof TemplateService !== 'undefined') {
+                const template = await TemplateService.getDefaultTemplate();
+                if (template && template.content) {
+                    return template.content;
+                }
+            }
+
+            // Fallback: busca direto do Supabase
+            const { data, error } = await supabase
+                .from('templates')
+                .select('content')
+                .eq('is_active', true)
+                .eq('category', 'academic')
+                .order('name', { ascending: true })
+                .limit(1)
+                .single();
+
+            if (!error && data && data.content) {
+                return data.content;
+            }
+        } catch (e) {
+            console.warn('Erro ao buscar template padrão:', e);
+        }
+
+        // Retorna fallback local
+        return this._FALLBACK_TEMPLATE;
+    },
+
     // ---------------------------------------------------------------
     // Session helpers (sync, localStorage – not user data)
     // ---------------------------------------------------------------

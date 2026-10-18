@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciar Usuarios - CarameloTeX Admin</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="styles/main.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'latex-green': '#008080',
+                        'latex-dark': '#1a1a2e',
+                        'latex-gray': '#16213e',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-latex-dark border-b border-gray-700 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+            <a href="projects.html" class="text-2xl font-bold text-latex-green hover:text-teal-400 transition-colors">
+                CarameloTeX
+            </a>
+            <span class="text-sm text-gray-400 bg-red-900/30 px-2 py-1 rounded">Admin</span>
+        </div>
+        <div class="flex items-center space-x-4">
+            <a href="projects.html" class="text-gray-400 hover:text-white transition-colors text-sm">
+                Voltar ao Editor
+            </a>
+            <button id="logoutBtn"
+                class="text-gray-400 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-gray-800"
+                title="Sair">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                    </path>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <div class="flex">
+        <!-- Sidebar -->
+        <aside class="w-64 bg-latex-dark border-r border-gray-700 min-h-[calc(100vh-73px)]">
+            <nav class="p-4 space-y-2">
+                <a href="admin.html"
+                    class="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6">
+                        </path>
+                    </svg>
+                    <span>Dashboard</span>
+                </a>
+                <a href="admin-templates.html"
+                    class="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z">
+                        </path>
+                    </svg>
+                    <span>Templates</span>
+                </a>
+                <a href="admin-users.html"
+                    class="flex items-center space-x-3 px-4 py-3 rounded-lg bg-latex-green/20 text-latex-green border border-latex-green/30">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z">
+                        </path>
+                    </svg>
+                    <span>Usuarios</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-8">
+            <div class="flex items-center justify-between mb-8">
+                <h1 class="text-2xl font-bold text-gray-100">Usuarios</h1>
+                <div class="flex items-center space-x-4">
+                    <div class="relative">
+                        <input type="text" id="searchUsers" placeholder="Buscar por email..."
+                            class="w-64 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 pl-10 text-sm focus:outline-none focus:border-latex-green">
+                        <svg class="w-5 h-5 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" fill="none"
+                            stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                    </div>
+                    <select id="filterRole"
+                        class="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-latex-green">
+                        <option value="all">Todos</option>
+                        <option value="user">Usuarios</option>
+                        <option value="admin">Admins</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Users Table -->
+            <div class="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+                <table class="w-full">
+                    <thead class="bg-gray-900/50">
+                        <tr>
+                            <th class="text-left px-6 py-4 text-sm font-medium text-gray-400">Email</th>
+                            <th class="text-left px-6 py-4 text-sm font-medium text-gray-400">Role</th>
+                            <th class="text-left px-6 py-4 text-sm font-medium text-gray-400">Status</th>
+                            <th class="text-left px-6 py-4 text-sm font-medium text-gray-400">Projetos</th>
+                            <th class="text-left px-6 py-4 text-sm font-medium text-gray-400">Criado em</th>
+                            <th class="text-right px-6 py-4 text-sm font-medium text-gray-400">Acoes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody">
+                        <!-- Loading -->
+                        <tr>
+                            <td colspan="6" class="px-6 py-12 text-center">
+                                <div class="flex items-center justify-center space-x-3 text-gray-400">
+                                    <svg class="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                    </svg>
+                                    <span>Carregando usuarios...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination info -->
+            <div id="paginationInfo" class="mt-4 text-sm text-gray-500"></div>
+        </main>
+    </div>
+
+    <!-- User Details Modal -->
+    <div id="userModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div class="p-4 border-b border-gray-700 flex items-center justify-between">
+                <h3 id="modalUserEmail" class="text-lg font-semibold">Detalhes do Usuario</h3>
+                <button id="closeUserModal" class="text-gray-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="flex-1 overflow-auto p-6">
+                <!-- User Info -->
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">ID</label>
+                        <p id="modalUserId" class="text-gray-200 text-sm font-mono bg-gray-900 rounded px-3 py-2"></p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">Email</label>
+                        <p id="modalUserEmailValue" class="text-gray-200 text-sm bg-gray-900 rounded px-3 py-2"></p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">Role</label>
+                        <select id="modalUserRole"
+                            class="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-latex-green">
+                            <option value="user">Usuario</option>
+                            <option value="admin">Administrador</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">Status</label>
+                        <div class="flex items-center space-x-4 bg-gray-900 rounded px-3 py-2">
+                            <label class="flex items-center space-x-2 cursor-pointer">
+                                <input type="checkbox" id="modalUserActive"
+                                    class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-latex-green focus:ring-latex-green">
+                                <span class="text-sm text-gray-300">Ativo</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">Criado em</label>
+                        <p id="modalUserCreated" class="text-gray-200 text-sm bg-gray-900 rounded px-3 py-2"></p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">Projetos</label>
+                        <p id="modalUserProjectCount" class="text-gray-200 text-sm bg-gray-900 rounded px-3 py-2"></p>
+                    </div>
+                </div>
+
+                <!-- User Projects -->
+                <div>
+                    <h4 class="text-sm font-medium text-gray-400 mb-3">Projetos do Usuario</h4>
+                    <div id="modalUserProjects" class="space-y-2 max-h-48 overflow-y-auto">
+                        <!-- Loading -->
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-700 flex justify-end space-x-3">
+                <button id="cancelUserModal"
+                    class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm transition-colors">
+                    Cancelar
+                </button>
+                <button id="saveUserModal"
+                    class="bg-latex-green hover:bg-teal-600 text-white px-4 py-2 rounded text-sm font-medium transition-colors">
+                    Salvar Alteracoes
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/supabase.js"></script>
+    <script src="js/admin.js"></script>
+    <script>
+        // State
+        let allUsers = [];
+        let currentUserId = null;
+        let projectCounts = {};
+
+        // Init
+        document.addEventListener('DOMContentLoaded', async () => {
+            const isAdmin = await AdminService.requireAdmin();
+            if (!isAdmin) return;
+
+            document.getElementById('logoutBtn').addEventListener('click', () => AuthService.signOut());
+
+            await loadUsers();
+            setupEventListeners();
+        });
+
+        async function loadUsers() {
+            allUsers = await UserService.listUsers();
+
+            // Carrega contagem de projetos para cada usuario
+            for (const user of allUsers) {
+                projectCounts[user.id] = await UserService.countUserProjects(user.id);
+            }
+
+            renderUsersTable(allUsers);
+        }
+
+        function renderUsersTable(users) {
+            const tbody = document.getElementById('usersTableBody');
+
+            if (users.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                            Nenhum usuario encontrado
+                        </td>
+                    </tr>
+                `;
+                document.getElementById('paginationInfo').textContent = '';
+                return;
+            }
+
+            tbody.innerHTML = users.map(user => {
+                const createdDate = new Date(user.created_at).toLocaleDateString('pt-BR');
+                const projectCount = projectCounts[user.id] || 0;
+
+                return `
+                    <tr class="border-t border-gray-700 hover:bg-gray-700/50 transition-colors">
+                        <td class="px-6 py-4">
+                            <span class="text-gray-200">${escapeHtml(user.email || 'N/A')}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${user.role === 'admin' ? 'bg-red-900/30 text-red-400' : 'bg-blue-900/30 text-blue-400'}">
+                                ${user.role === 'admin' ? 'Admin' : 'Usuario'}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${user.is_active ? 'bg-green-900/30 text-green-400' : 'bg-gray-900/30 text-gray-400'}">
+                                ${user.is_active ? 'Ativo' : 'Inativo'}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-gray-400">
+                            ${projectCount}
+                        </td>
+                        <td class="px-6 py-4 text-gray-400 text-sm">
+                            ${createdDate}
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <button class="view-user-btn text-latex-green hover:text-teal-400 text-sm transition-colors"
+                                    data-id="${user.id}">
+                                Ver detalhes
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Bind click handlers
+            tbody.querySelectorAll('.view-user-btn').forEach(btn => {
+                btn.addEventListener('click', () => openUserModal(btn.dataset.id));
+            });
+
+            document.getElementById('paginationInfo').textContent = `Mostrando ${users.length} usuario(s)`;
+        }
+
+        async function openUserModal(userId) {
+            const user = allUsers.find(u => u.id === userId);
+            if (!user) return;
+
+            currentUserId = userId;
+
+            // Fill modal
+            document.getElementById('modalUserEmail').textContent = user.email || 'N/A';
+            document.getElementById('modalUserId').textContent = user.id;
+            document.getElementById('modalUserEmailValue').textContent = user.email || 'N/A';
+            document.getElementById('modalUserRole').value = user.role;
+            document.getElementById('modalUserActive').checked = user.is_active;
+            document.getElementById('modalUserCreated').textContent = new Date(user.created_at).toLocaleString('pt-BR');
+            document.getElementById('modalUserProjectCount').textContent = projectCounts[user.id] || 0;
+
+            // Load projects
+            const projectsDiv = document.getElementById('modalUserProjects');
+            projectsDiv.innerHTML = '<div class="text-gray-500 text-sm">Carregando projetos...</div>';
+
+            const projects = await UserService.listUserProjects(userId);
+
+            if (projects.length === 0) {
+                projectsDiv.innerHTML = '<div class="text-gray-500 text-sm">Nenhum projeto</div>';
+            } else {
+                projectsDiv.innerHTML = projects.map(p => `
+                    <div class="flex items-center justify-between bg-gray-900 rounded px-3 py-2">
+                        <span class="text-sm text-gray-300 truncate">${escapeHtml(p.name)}</span>
+                        <span class="text-xs text-gray-500">${new Date(p.last_modified).toLocaleDateString('pt-BR')}</span>
+                    </div>
+                `).join('');
+            }
+
+            // Show modal
+            document.getElementById('userModal').classList.remove('hidden');
+        }
+
+        function closeUserModal() {
+            document.getElementById('userModal').classList.add('hidden');
+            currentUserId = null;
+        }
+
+        async function saveUserChanges() {
+            if (!currentUserId) return;
+
+            const newRole = document.getElementById('modalUserRole').value;
+            const isActive = document.getElementById('modalUserActive').checked;
+
+            // Get current user to check for changes
+            const user = allUsers.find(u => u.id === currentUserId);
+            if (!user) return;
+
+            let success = true;
+
+            // Update role if changed
+            if (user.role !== newRole) {
+                const result = await UserService.updateRole(currentUserId, newRole);
+                if (!result) {
+                    showToast('Erro ao atualizar role', 'error');
+                    success = false;
+                }
+            }
+
+            // Update active status if changed
+            if (user.is_active !== isActive) {
+                const result = await UserService.setUserActive(currentUserId, isActive);
+                if (!result) {
+                    showToast('Erro ao atualizar status', 'error');
+                    success = false;
+                }
+            }
+
+            if (success) {
+                showToast('Usuario atualizado com sucesso!', 'success');
+                closeUserModal();
+                await loadUsers();
+            }
+        }
+
+        // Event Listeners
+        function setupEventListeners() {
+            // Close modal
+            document.getElementById('closeUserModal').addEventListener('click', closeUserModal);
+            document.getElementById('cancelUserModal').addEventListener('click', closeUserModal);
+            document.getElementById('userModal').addEventListener('click', (e) => {
+                if (e.target.id === 'userModal') closeUserModal();
+            });
+
+            // Save changes
+            document.getElementById('saveUserModal').addEventListener('click', saveUserChanges);
+
+            // Search
+            let searchTimeout;
+            document.getElementById('searchUsers').addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    filterUsers();
+                }, 300);
+            });
+
+            // Filter role
+            document.getElementById('filterRole').addEventListener('change', filterUsers);
+        }
+
+        function filterUsers() {
+            const searchQuery = document.getElementById('searchUsers').value.toLowerCase();
+            const roleFilter = document.getElementById('filterRole').value;
+
+            let filtered = allUsers;
+
+            if (searchQuery) {
+                filtered = filtered.filter(u =>
+                    u.email && u.email.toLowerCase().includes(searchQuery)
+                );
+            }
+
+            if (roleFilter !== 'all') {
+                filtered = filtered.filter(u => u.role === roleFilter);
+            }
+
+            renderUsersTable(filtered);
+        }
+
+        // Helpers
+        function escapeHtml(str) {
+            if (typeof str !== 'string') return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            const colors = {
+                success: 'bg-green-600',
+                error: 'bg-red-600',
+                warning: 'bg-yellow-600',
+                info: 'bg-blue-600'
+            };
+            toast.className = `${colors[type]} text-white px-4 py-2 rounded shadow-lg text-sm`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+    </script>
+</body>
+
+</html>

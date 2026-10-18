@@ -38,42 +38,21 @@ let _deletedFiles = new Set(); // paths deletados desde ultimo save
 let _offlineSavePending = false; // true se um save falhou por rede
 let _saveStatusTimer = null;
 
-// Template padrão LaTeX
-const defaultTemplate = `\\documentclass{article}
-\\usepackage[utf8]{inputenc}
-\\usepackage[T1]{fontenc}
-\\usepackage{amsmath}
-\\usepackage{graphicx}
+// Template padrão LaTeX (carregado do Supabase ou fallback)
+let defaultTemplate = null;
 
-\\title{Meu Documento LaTeX}
-\\author{Autor}
-\\date{\\today}
+/**
+ * Carrega o template padrão do banco de dados ou usa fallback.
+ * @returns {Promise<string>}
+ */
+async function loadDefaultTemplate() {
+    if (defaultTemplate !== null) {
+        return defaultTemplate;
+    }
 
-\\begin{document}
-
-\\maketitle
-
-\\section{Introdução}
-
-Este é um exemplo de documento \\LaTeX{} online.
-
-\\subsection{Fórmulas Matemáticas}
-
-A famosa equação de Einstein:
-\\[
-E = mc^2
-\\]
-
-Integral definida:
-\\[
-\\int_{0}^{\\infty} e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}
-\\]
-
-\\section{Conclusão}
-
-Compile este documento para visualizar o PDF!
-
-\\end{document}`;
+    defaultTemplate = await StorageService.getDefaultTemplate();
+    return defaultTemplate;
+}
 
 // StorageService is now imported from js/storage.js
 
@@ -273,7 +252,7 @@ function initEditor() {
     const editorElement = document.getElementById('editor');
 
     editor = CodeMirror(editorElement, {
-        value: defaultTemplate,
+        value: '', // Será preenchido após carregar o template
         mode: 'stex',
         theme: 'dracula',
         lineNumbers: true,
@@ -1327,7 +1306,10 @@ async function initFileSystem() {
             editor.setValue(projectFiles[currentFile].content);
         }
     } else {
-        projectFiles['main.tex'].content = defaultTemplate;
+        // Carrega template padrão do banco ou usa fallback
+        const template = await loadDefaultTemplate();
+        projectFiles['main.tex'].content = template;
+        editor.setValue(template);
     }
 
     // Reset dirty tracking after load
