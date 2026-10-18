@@ -24,3 +24,8 @@ npm-debug.log*
 # Build artifacts
 dist/
 build/
+
+# Tauri / Vite
+src-tauri/target/
+src-tauri/gen/
+src-tauri/resources/tinytex.zip

@@ -1,0 +1,168 @@
+[
+  {
+    "id": "artigo-basico",
+    "name": "Artigo Basico",
+    "description": "Template simples para artigos academicos com estrutura padrao.",
+    "category": "academic",
+    "tags": [
+      "artigo",
+      "basico",
+      "academico"
+    ],
+    "icon": "document",
+    "files": {
+      "main.tex": "\\documentclass[12pt,a4paper]{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage[T1]{fontenc}\n\\usepackage[portuguese]{babel}\n\\usepackage{amsmath,amssymb}\n\\usepackage{graphicx}\n\\usepackage[margin=2.5cm]{geometry}\n\\usepackage{setspace}\n\\usepackage{hyperref}\n\n\\title{Titulo do Artigo}\n\\author{Nome do Autor\\\\\n\\small Instituicao\\\\\n\\small \\texttt{email@exemplo.com}}\n\\date{\\today}\n\n\\begin{document}\n\n\\maketitle\n\n\\begin{abstract}\nResumo do artigo em um paragrafo. Descreva brevemente o objetivo, metodologia, resultados e conclusoes do trabalho.\n\\end{abstract}\n\n\\textbf{Palavras-chave:} palavra1, palavra2, palavra3.\n\n\\section{Introducao}\n\nIntroducao ao tema do artigo. Contextualize o problema e apresente os objetivos do trabalho.\n\n\\section{Revisao da Literatura}\n\nApresente os trabalhos relacionados e o estado da arte.\n\n\\section{Metodologia}\n\nDescreva a metodologia utilizada no trabalho.\n\n\\section{Resultados}\n\nApresente os resultados obtidos.\n\n\\subsection{Analise dos Dados}\n\nAnalise os dados coletados.\n\n\\section{Conclusao}\n\nConclusoes do trabalho e sugestoes para trabalhos futuros.\n\n\\bibliographystyle{plain}\n% \\bibliography{referencias}\n\n\\end{document}"
+    }
+  },
+  {
+    "id": "ieee-conference",
+    "name": "IEEE Conference",
+    "description": "Template no formato IEEE para conferencias internacionais.",
+    "category": "academic",
+    "tags": [
+      "ieee",
+      "conferencia",
+      "internacional"
+    ],
+    "icon": "academic",
+    "files": {
+      "main.tex": "\\documentclass[conference]{IEEEtran}\n\\usepackage[utf8]{inputenc}\n\\usepackage[T1]{fontenc}\n\\usepackage{amsmath,amssymb}\n\\usepackage{graphicx}\n\\usepackage{hyperref}\n\\usepackage{cite}\n\n\\begin{document}\n\n\\title{Paper Title in IEEE Format}\n\n\\author{\n\\IEEEauthorblockN{First Author}\n\\IEEEauthorblockA{\\textit{Department} \\\\\n\\textit{University}\\\\\nCity, Country \\\\\nemail@example.com}\n\\and\n\\IEEEauthorblockN{Second Author}\n\\IEEEauthorblockA{\\textit{Department} \\\\\n\\textit{University}\\\\\nCity, Country \\\\\nemail@example.com}\n}\n\n\\maketitle\n\n\\begin{abstract}\nThis document provides a template for IEEE conference papers. The abstract should be a brief summary of the paper's main contributions, typically 150-200 words.\n\\end{abstract}\n\n\\begin{IEEEkeywords}\nkeyword1, keyword2, keyword3, keyword4\n\\end{IEEEkeywords}\n\n\\section{Introduction}\nThe introduction should present the problem being addressed and provide context for the research.\n\n\\section{Related Work}\nDiscuss previous research and how your work differs or builds upon it.\n\n\\section{Methodology}\nDescribe your approach and methods.\n\n\\section{Results}\nPresent your findings with supporting data, tables, and figures.\n\n\\subsection{Experimental Setup}\nDescribe the experimental configuration.\n\n\\subsection{Performance Analysis}\nAnalyze the results.\n\n\\section{Conclusion}\nSummarize the contributions and suggest future work.\n\n\\section*{Acknowledgment}\nThe authors would like to thank...\n\n\\bibliographystyle{IEEEtran}\n% \\bibliography{references}\n\n\\end{document}"
+    }
+  },
+  {
+    "id": "artigo-abnt",
+    "name": "Artigo ABNT",
+    "description": "Artigo seguindo as normas da ABNT para trabalhos academicos no Brasil.",
+    "category": "academic",
+    "tags": [
+      "abnt",
+      "brasil",
+      "academico"
+    ],
+    "icon": "document",
+    "files": {
+      "main.tex": "\\documentclass[12pt,a4paper,oneside]{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage[T1]{fontenc}\n\\usepackage[brazilian]{babel}\n\\usepackage{indentfirst}\n\\usepackage{graphicx}\n\\usepackage{amsmath,amssymb}\n\\usepackage[left=3cm,right=2cm,top=3cm,bottom=2cm]{geometry}\n\\usepackage{setspace}\n\\usepackage{hyperref}\n\n% Configuracoes ABNT\n\\setlength{\\parindent}{1.25cm}\n\\onehalfspacing\n\n\\begin{document}\n\n% Capa\n\\begin{center}\n\\textbf{\\large TITULO DO ARTIGO EM CAIXA ALTA}\n\n\\vspace{1cm}\n\nNome do Autor\\textsuperscript{1}\n\n\\vspace{0.5cm}\n\n\\textsuperscript{1}Instituicao, Cidade, Estado, Brasil. E-mail: autor@email.com\n\n\\end{center}\n\n\\vspace{1cm}\n\n\\noindent\\textbf{RESUMO}\n\n\\noindent\nTexto do resumo contendo objetivo, metodologia, resultados e conclusoes. O resumo deve ter entre 150 e 500 palavras segundo as normas da ABNT NBR 6028.\n\n\\vspace{0.5cm}\n\\noindent\\textbf{Palavras-chave:} Palavra 1. Palavra 2. Palavra 3.\n\n\\vspace{1cm}\n\n\\noindent\\textbf{ABSTRACT}\n\n\\noindent\nAbstract text containing objective, methodology, results and conclusions.\n\n\\vspace{0.5cm}\n\\noindent\\textbf{Keywords:} Keyword 1. Keyword 2. Keyword 3.\n\n\\section{INTRODUCAO}\n\nTexto da introducao apresentando o tema, problema de pesquisa, objetivos e justificativa do trabalho.\n\n\\section{REFERENCIAL TEORICO}\n\nApresentacao dos conceitos teoricos e revisao da literatura.\n\n\\section{METODOLOGIA}\n\nDescricao dos procedimentos metodologicos adotados na pesquisa.\n\n\\section{RESULTADOS E DISCUSSAO}\n\nApresentacao e analise dos resultados obtidos.\n\n\\section{CONSIDERACOES FINAIS}\n\nConclusoes do trabalho e sugestoes para pesquisas futuras.\n\n\\section*{REFERENCIAS}\n\n% Use o pacote abntex2cite para formatacao automatica\n% Exemplo manual:\n\\noindent SOBRENOME, Nome. \\textbf{Titulo da obra}. Cidade: Editora, Ano.\n\n\\end{document}"
+    }
+  },
+  {
+    "id": "dissertacao-tese",
+    "name": "Dissertacao/Tese",
+    "description": "Estrutura completa para dissertacoes de mestrado e teses de doutorado.",
+    "category": "thesis",
+    "tags": [
+      "tese",
+      "dissertacao",
+      "mestrado",
+      "doutorado"
+    ],
+    "icon": "book",
+    "files": {
+      "main.tex": "\\documentclass[12pt,a4paper,oneside]{book}\n\\usepackage[utf8]{inputenc}\n\\usepackage[T1]{fontenc}\n\\usepackage[portuguese]{babel}\n\\usepackage{amsmath,amssymb,amsthm}\n\\usepackage{graphicx}\n\\usepackage[left=3cm,right=2cm,top=3cm,bottom=2cm]{geometry}\n\\usepackage{setspace}\n\\usepackage{hyperref}\n\\usepackage{fancyhdr}\n\\usepackage{tocloft}\n\n\\onehalfspacing\n\n% Configuracao de cabecalho\n\\pagestyle{fancy}\n\\fancyhf{}\n\\fancyhead[R]{\\thepage}\n\\renewcommand{\\headrulewidth}{0pt}\n\n\\begin{document}\n\n% ===== ELEMENTOS PRE-TEXTUAIS =====\n\n% Capa\n\\begin{titlepage}\n\\begin{center}\n\\textbf{\\large UNIVERSIDADE EXEMPLO}\\\\\n\\textbf{PROGRAMA DE POS-GRADUACAO EM AREA}\n\n\\vspace{4cm}\n\n\\textbf{\\Large NOME DO AUTOR}\n\n\\vspace{3cm}\n\n\\textbf{\\LARGE TITULO DA DISSERTACAO OU TESE}\n\n\\vfill\n\nCidade\\\\\nAno\n\\end{center}\n\\end{titlepage}\n\n% Folha de Rosto\n\\begin{titlepage}\n\\begin{center}\n\\textbf{\\Large NOME DO AUTOR}\n\n\\vspace{3cm}\n\n\\textbf{\\LARGE TITULO DA DISSERTACAO OU TESE}\n\n\\vspace{2cm}\n\n\\hfill\n\\begin{minipage}{10cm}\nDissertacao/Tese apresentada ao Programa de Pos-Graduacao em Area da Universidade Exemplo, como requisito parcial para obtencao do titulo de Mestre/Doutor em Area.\n\n\\vspace{1cm}\n\nOrientador: Prof. Dr. Nome do Orientador\n\\end{minipage}\n\n\\vfill\n\nCidade\\\\\nAno\n\\end{center}\n\\end{titlepage}\n\n% Dedicatoria (opcional)\n\\newpage\n\\thispagestyle{empty}\n\\vspace*{\\fill}\n\\begin{flushright}\n\\textit{Dedicatoria opcional.}\n\\end{flushright}\n\n% Agradecimentos\n\\chapter*{Agradecimentos}\n\\addcontentsline{toc}{chapter}{Agradecimentos}\nAgradecimentos aos que contribuiram para a realizacao deste trabalho.\n\n% Resumo\n\\chapter*{Resumo}\n\\addcontentsline{toc}{chapter}{Resumo}\nTexto do resumo em portugues.\n\n\\textbf{Palavras-chave:} palavra1, palavra2, palavra3.\n\n% Abstract\n\\chapter*{Abstract}\n\\addcontentsline{toc}{chapter}{Abstract}\nAbstract text in English.\n\n\\textbf{Keywords:} keyword1, keyword2, keyword3.\n\n% Sumario\n\\tableofcontents\n\n% Lista de Figuras\n\\listoffigures\n\\addcontentsline{toc}{chapter}{Lista de Figuras}\n\n% Lista de Tabelas\n\\listoftables\n\\addcontentsline{toc}{chapter}{Lista de Tabelas}\n\n% ===== ELEMENTOS TEXTUAIS =====\n\n\\chapter{Introducao}\n\\pagenumbering{arabic}\n\nIntroducao ao tema da pesquisa.\n\n\\section{Contextualizacao}\nContexto do problema.\n\n\\section{Objetivos}\n\\subsection{Objetivo Geral}\nObjetivo geral da pesquisa.\n\n\\subsection{Objetivos Especificos}\n\\begin{itemize}\n    \\item Objetivo especifico 1;\n    \\item Objetivo especifico 2;\n    \\item Objetivo especifico 3.\n\\end{itemize}\n\n\\section{Justificativa}\nJustificativa do trabalho.\n\n\\section{Estrutura do Trabalho}\nDescricao da organizacao dos capitulos.\n\n\\chapter{Revisao da Literatura}\nFundamentacao teorica e estado da arte.\n\n\\chapter{Metodologia}\nDescricao dos metodos e materiais utilizados.\n\n\\chapter{Resultados e Discussao}\nApresentacao e analise dos resultados.\n\n\\chapter{Conclusao}\nConclusoes e trabalhos futuros.\n\n% ===== ELEMENTOS POS-TEXTUAIS =====\n\n\\bibliographystyle{plain}\n% \\bibliography{referencias}\n\n\\appendix\n\\chapter{Apendice A}\nMaterial complementar elaborado pelo autor.\n\n\\end{document}"
+    }
+  },
+  {
+    "id": "tcc-trabalho-de-conclusao",
+    "name": "TCC - Trabalho de Conclusao",
+    "description": "Template para Trabalhos de Conclusao de Curso de graduacao.",
+    "category": "thesis",
+    "tags": [
+      "tcc",
+      "graduacao",
+      "monografia"
+    ],
+    "icon": "book",
+    "files": {
+      "main.tex": "\\documentclass[12pt,a4paper]{report}\n\\usepackage[utf8]{inputenc}\n\\usepackage[T1]{fontenc}\n\\usepackage[brazilian]{babel}\n\\usepackage{indentfirst}\n\\usepackage{graphicx}\n\\usepackage{amsmath}\n\\usepackage[left=3cm,right=2cm,top=3cm,bottom=2cm]{geometry}\n\\usepackage{setspace}\n\\usepackage{hyperref}\n\n\\onehalfspacing\n\\setlength{\\parindent}{1.25cm}\n\n\\begin{document}\n\n% Capa\n\\begin{titlepage}\n\\begin{center}\n\\textbf{\\large NOME DA INSTITUICAO}\\\\\n\\textbf{CURSO DE GRADUACAO}\n\n\\vspace{5cm}\n\n\\textbf{\\Large NOME DO ALUNO}\n\n\\vspace{3cm}\n\n\\textbf{\\LARGE TITULO DO TRABALHO DE CONCLUSAO DE CURSO}\n\n\\vfill\n\nCidade\\\\\nAno\n\\end{center}\n\\end{titlepage}\n\n% Folha de Rosto\n\\begin{titlepage}\n\\begin{center}\n\\textbf{\\Large NOME DO ALUNO}\n\n\\vspace{4cm}\n\n\\textbf{\\LARGE TITULO DO TRABALHO DE CONCLUSAO DE CURSO}\n\n\\vspace{2cm}\n\n\\hfill\n\\begin{minipage}{10cm}\nTrabalho de Conclusao de Curso apresentado ao Curso de Graduacao em Area da Instituicao, como requisito parcial para obtencao do grau de Bacharel/Licenciado em Area.\n\n\\vspace{1cm}\n\nOrientador: Prof. Nome do Orientador\n\\end{minipage}\n\n\\vfill\n\nCidade\\\\\nAno\n\\end{center}\n\\end{titlepage}\n\n% Resumo\n\\begin{abstract}\nResumo do trabalho em um unico paragrafo, contendo contexto, objetivo, metodologia, resultados e conclusao. Deve ter entre 150 e 500 palavras.\n\n\\vspace{0.5cm}\n\\noindent\\textbf{Palavras-chave:} Palavra 1. Palavra 2. Palavra 3.\n\\end{abstract}\n\n% Sumario\n\\tableofcontents\n\n% Capitulos\n\\chapter{Introducao}\n\nApresentacao do tema, problema de pesquisa, objetivos e estrutura do trabalho.\n\n\\section{Justificativa}\nImportancia e relevancia do trabalho.\n\n\\section{Objetivos}\n\\subsection{Objetivo Geral}\nObjetivo principal do trabalho.\n\n\\subsection{Objetivos Especificos}\n\\begin{enumerate}\n    \\item Primeiro objetivo especifico;\n    \\item Segundo objetivo especifico;\n    \\item Terceiro objetivo especifico.\n\\end{enumerate}\n\n\\chapter{Fundamentacao Teorica}\nRevisao bibliografica e conceitos fundamentais.\n\n\\chapter{Metodologia}\nDescricao dos procedimentos metodologicos.\n\n\\chapter{Desenvolvimento}\nDesenvolvimento do trabalho.\n\n\\chapter{Resultados}\nApresentacao e discussao dos resultados.\n\n\\chapter{Conclusao}\nConclusoes e sugestoes para trabalhos futuros.\n\n% Referencias\n\\bibliographystyle{plain}\n% \\bibliography{referencias}\n\n\\end{document}"
+    }
+  },
+  {
+    "id": "apresentacao-beamer",
+    "name": "Apresentacao Beamer",
+    "description": "Template basico para apresentacoes com Beamer.",
+    "category": "presentation",
+    "tags": [
+      "beamer",
+      "slides",
+      "apresentacao"
+    ],
+    "icon": "presentation",
+    "files": {
+      "main.tex": "\\documentclass{beamer}\n\\usepackage[utf8]{inputenc}\n\\usepackage[T1]{fontenc}\n\\usepackage[portuguese]{babel}\n\\usepackage{graphicx}\n\\usepackage{amsmath}\n\n% Tema do Beamer\n\\usetheme{Madrid}\n\\usecolortheme{default}\n\n% Informacoes da apresentacao\n\\title{Titulo da Apresentacao}\n\\subtitle{Subtitulo Opcional}\n\\author{Nome do Autor}\n\\institute{Instituicao}\n\\date{\\today}\n\n\\begin{document}\n\n% Slide de titulo\n\\begin{frame}\n\\titlepage\n\\end{frame}\n\n% Sumario\n\\begin{frame}{Sumario}\n\\tableofcontents\n\\end{frame}\n\n% ===== SECAO 1 =====\n\\section{Introducao}\n\n\\begin{frame}{Introducao}\n\\begin{itemize}\n    \\item Primeiro ponto importante\n    \\item Segundo ponto importante\n    \\item Terceiro ponto importante\n\\end{itemize}\n\\end{frame}\n\n\\begin{frame}{Motivacao}\n\\begin{block}{Problema}\nDescricao do problema a ser abordado.\n\\end{block}\n\n\\begin{block}{Solucao Proposta}\nBreve descricao da solucao.\n\\end{block}\n\\end{frame}\n\n% ===== SECAO 2 =====\n\\section{Metodologia}\n\n\\begin{frame}{Metodologia}\n\\begin{enumerate}\n    \\item Etapa 1: Descricao\n    \\item Etapa 2: Descricao\n    \\item Etapa 3: Descricao\n\\end{enumerate}\n\\end{frame}\n\n\\begin{frame}{Formulas Matematicas}\nA equacao de Einstein:\n\\begin{equation}\nE = mc^2\n\\end{equation}\n\nIntegral definida:\n\\begin{equation}\n\\int_{0}^{\\infty} e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}\n\\end{equation}\n\\end{frame}\n\n% ===== SECAO 3 =====\n\\section{Resultados}\n\n\\begin{frame}{Resultados}\n\\begin{columns}\n\\column{0.5\\textwidth}\n\\textbf{Vantagens:}\n\\begin{itemize}\n    \\item Vantagem 1\n    \\item Vantagem 2\n\\end{itemize}\n\n\\column{0.5\\textwidth}\n\\textbf{Limitacoes:}\n\\begin{itemize}\n    \\item Limitacao 1\n    \\item Limitacao 2\n\\end{itemize}\n\\end{columns}\n\\end{frame}\n\n% ===== SECAO 4 =====\n\\section{Conclusao}\n\n\\begin{frame}{Conclusao}\n\\begin{itemize}\n    \\item Resumo das contribuicoes\n    \\item Trabalhos futuros\n    \\item Consideracoes finais\n\\end{itemize}\n\n\\vspace{1cm}\n\\centering\n\\textbf{Obrigado!}\n\n\\vspace{0.5cm}\n\\small{email@exemplo.com}\n\\end{frame}\n\n% Slide de referencias\n\\begin{frame}{Referencias}\n\\begin{thebibliography}{9}\n\\bibitem{ref1} Autor, \\textit{Titulo do Livro}, Editora, Ano.\n\\bibitem{ref2} Autor, \\textit{Titulo do Artigo}, Journal, Ano.\n\\end{thebibliography}\n\\end{frame}\n\n\\end{document}"
+    }
+  },
+  {
+    "id": "beamer-moderno-metropolis",
+    "name": "Beamer Moderno (Metropolis)",
+    "description": "Apresentacao com tema moderno e minimalista Metropolis.",
+    "category": "presentation",
+    "tags": [
+      "beamer",
+      "moderno",
+      "metropolis"
+    ],
+    "icon": "presentation",
+    "files": {
+      "main.tex": "\\documentclass{beamer}\n\\usepackage[utf8]{inputenc}\n\\usepackage[T1]{fontenc}\n\\usepackage{graphicx}\n\\usepackage{amsmath}\n\\usepackage{booktabs}\n\n% Tema Metropolis (moderno e minimalista)\n% Nota: Requer o pacote metropolis instalado\n\\usetheme{metropolis}\n\n% Cores personalizadas\n\\definecolor{mDarkTeal}{HTML}{23373b}\n\\definecolor{mLightBrown}{HTML}{EB811B}\n\n\\title{Titulo da Apresentacao}\n\\subtitle{Uma Abordagem Moderna}\n\\author{Nome do Autor}\n\\institute{Universidade / Empresa}\n\\date{\\today}\n\n\\begin{document}\n\n\\maketitle\n\n\\begin{frame}{Agenda}\n\\setbeamertemplate{section in toc}[sections numbered]\n\\tableofcontents[hideallsubsections]\n\\end{frame}\n\n\\section{Introducao}\n\n\\begin{frame}{Contexto}\n\\begin{itemize}[<+->]\n    \\item Ponto revelado gradualmente\n    \\item Segundo ponto\n    \\item Terceiro ponto\n\\end{itemize}\n\\end{frame}\n\n\\begin{frame}{Objetivos}\n\\begin{alertblock}{Objetivo Principal}\nDescrever o objetivo principal da pesquisa ou projeto.\n\\end{alertblock}\n\n\\begin{exampleblock}{Objetivos Especificos}\n\\begin{enumerate}\n    \\item Objetivo 1\n    \\item Objetivo 2\n    \\item Objetivo 3\n\\end{enumerate}\n\\end{exampleblock}\n\\end{frame}\n\n\\section{Desenvolvimento}\n\n\\begin{frame}{Metodologia}\n\\begin{columns}[T]\n\\begin{column}{0.48\\textwidth}\n\\textbf{Fase 1}\n\\begin{itemize}\n    \\item Coleta de dados\n    \\item Analise inicial\n\\end{itemize}\n\\end{column}\n\\begin{column}{0.48\\textwidth}\n\\textbf{Fase 2}\n\\begin{itemize}\n    \\item Implementacao\n    \\item Validacao\n\\end{itemize}\n\\end{column}\n\\end{columns}\n\\end{frame}\n\n\\begin{frame}{Tabela de Resultados}\n\\begin{table}\n\\centering\n\\begin{tabular}{@{}lcc@{}}\n\\toprule\n\\textbf{Metodo} & \\textbf{Precisao} & \\textbf{Tempo (s)} \\\\\n\\midrule\nMetodo A & 95.2\\% & 1.23 \\\\\nMetodo B & 93.8\\% & 0.89 \\\\\nProposto & \\textbf{97.1\\%} & 1.05 \\\\\n\\bottomrule\n\\end{tabular}\n\\caption{Comparacao de metodos}\n\\end{table}\n\\end{frame}\n\n\\section{Conclusao}\n\n\\begin{frame}{Conclusoes}\n\\begin{itemize}\n    \\item Contribuicao principal do trabalho\n    \\item Resultados alcancados\n    \\item Direcoes futuras\n\\end{itemize}\n\n\\vspace{1cm}\n\\begin{center}\n{\\Large Perguntas?}\n\n\\vspace{0.5cm}\n\\texttt{email@exemplo.com}\n\\end{center}\n\\end{frame}\n\n\\begin{frame}[standout]\nObrigado!\n\\end{frame}\n\n\\end{document}"
+    }
+  },
+  {
+    "id": "curriculo-moderno",
+    "name": "Curriculo Moderno",
+    "description": "Template de curriculo profissional com design moderno.",
+    "category": "professional",
+    "tags": [
+      "curriculo",
+      "cv",
+      "profissional"
+    ],
+    "icon": "user",
+    "files": {
+      "main.tex": "\\documentclass[11pt,a4paper]{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage[T1]{fontenc}\n\\usepackage[portuguese]{babel}\n\\usepackage{geometry}\n\\usepackage{titlesec}\n\\usepackage{enumitem}\n\\usepackage{hyperref}\n\\usepackage{xcolor}\n\\usepackage{fontawesome5}\n\n\\geometry{left=1.5cm, right=1.5cm, top=1.5cm, bottom=1.5cm}\n\n% Cores\n\\definecolor{primary}{HTML}{2C3E50}\n\\definecolor{secondary}{HTML}{7F8C8D}\n\\definecolor{accent}{HTML}{3498DB}\n\n% Formatacao de secoes\n\\titleformat{\\section}{\\Large\\bfseries\\color{primary}}{}{0em}{}[\\titlerule]\n\\titlespacing*{\\section}{0pt}{12pt}{8pt}\n\n% Remover numeracao de pagina\n\\pagestyle{empty}\n\n\\begin{document}\n\n% Cabecalho\n\\begin{center}\n{\\Huge\\bfseries\\color{primary} Nome Completo}\n\n\\vspace{0.3cm}\n\n{\\large\\color{secondary} Cargo / Titulo Profissional}\n\n\\vspace{0.3cm}\n\n\\faIcon{map-marker-alt} Cidade, Estado \\quad\n\\faIcon{phone} (00) 00000-0000 \\quad\n\\faIcon{envelope} \\href{mailto:email@exemplo.com}{email@exemplo.com}\n\n\\faIcon{linkedin} \\href{https://linkedin.com/in/usuario}{linkedin.com/in/usuario} \\quad\n\\faIcon{github} \\href{https://github.com/usuario}{github.com/usuario}\n\\end{center}\n\n\\vspace{0.5cm}\n\n% Resumo\n\\section{Resumo Profissional}\nProfissional com X anos de experiencia em [area]. Especializado em [habilidades principais]. Busco oportunidades para [objetivo profissional].\n\n% Experiencia\n\\section{Experiencia Profissional}\n\n\\textbf{\\large Cargo Atual} \\hfill \\textit{Jan 2022 -- Presente}\\\\\n\\textit{Nome da Empresa} -- Cidade, Estado\n\\begin{itemize}[leftmargin=*, nosep]\n    \\item Realizacao ou responsabilidade principal\n    \\item Projeto importante com resultados mensuraveis\n    \\item Outra conquista relevante\n\\end{itemize}\n\n\\vspace{0.3cm}\n\n\\textbf{\\large Cargo Anterior} \\hfill \\textit{Jun 2019 -- Dez 2021}\\\\\n\\textit{Nome da Empresa} -- Cidade, Estado\n\\begin{itemize}[leftmargin=*, nosep]\n    \\item Descricao de atividade ou conquista\n    \\item Resultado alcancado\n\\end{itemize}\n\n% Educacao\n\\section{Formacao Academica}\n\n\\textbf{\\large Mestrado/Bacharelado em Area} \\hfill \\textit{2015 -- 2019}\\\\\n\\textit{Nome da Universidade} -- Cidade, Estado\n\n\\vspace{0.2cm}\n\n\\textbf{\\large Curso Complementar} \\hfill \\textit{2020}\\\\\n\\textit{Instituicao} -- Online/Presencial\n\n% Habilidades\n\\section{Habilidades}\n\n\\textbf{Tecnicas:} Habilidade 1, Habilidade 2, Habilidade 3, Habilidade 4\n\n\\textbf{Ferramentas:} Ferramenta 1, Ferramenta 2, Ferramenta 3\n\n\\textbf{Idiomas:} Portugues (Nativo), Ingles (Avancado), Espanhol (Intermediario)\n\n% Certificacoes\n\\section{Certificacoes}\n\\begin{itemize}[leftmargin=*, nosep]\n    \\item Certificacao 1 -- Instituicao (Ano)\n    \\item Certificacao 2 -- Instituicao (Ano)\n\\end{itemize}\n\n\\end{document}"
+    }
+  },
+  {
+    "id": "carta-de-apresentacao",
+    "name": "Carta de Apresentacao",
+    "description": "Modelo de carta de apresentacao para candidatura a vagas.",
+    "category": "professional",
+    "tags": [
+      "carta",
+      "apresentacao",
+      "emprego"
+    ],
+    "icon": "mail",
+    "files": {
+      "main.tex": "\\documentclass[11pt,a4paper]{letter}\n\\usepackage[utf8]{inputenc}\n\\usepackage[T1]{fontenc}\n\\usepackage[portuguese]{babel}\n\\usepackage{geometry}\n\\usepackage{hyperref}\n\n\\geometry{left=2.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm}\n\n\\signature{Seu Nome Completo}\n\\address{Seu Endereco Completo\\\\Cidade, Estado -- CEP\\\\Telefone: (00) 00000-0000\\\\Email: seu.email@exemplo.com}\n\n\\begin{document}\n\n\\begin{letter}{Nome da Empresa\\\\Departamento de Recursos Humanos\\\\Endereco da Empresa\\\\Cidade, Estado -- CEP}\n\n\\opening{Prezado(a) Recrutador(a),}\n\nEscrevo para expressar meu interesse na vaga de [Nome do Cargo] anunciada em [onde viu a vaga]. Com [X anos] de experiencia em [area], acredito que minhas habilidades e qualificacoes estao alinhadas com os requisitos da posicao.\n\nEm minha experiencia mais recente na [Empresa Anterior], fui responsavel por [principais responsabilidades]. Durante esse periodo, alcancei [conquistas mensuraveis, como aumentar vendas em X\\%, reduzir custos em Y\\%, implementar projeto Z].\n\nSou particularmente atraido por esta oportunidade na [Nome da Empresa] devido a [razoes especificas -- valores da empresa, projetos interessantes, cultura organizacional]. Minha experiencia em [habilidades relevantes] me preparou para contribuir significativamente para [objetivo ou desafio da equipe].\n\nAlgumas das minhas principais qualificacoes incluem:\n\\begin{itemize}\n    \\item Habilidade ou experiencia relevante 1\n    \\item Habilidade ou experiencia relevante 2\n    \\item Habilidade ou experiencia relevante 3\n\\end{itemize}\n\nEstou entusiasmado com a possibilidade de contribuir para o sucesso da [Nome da Empresa] e gostaria de discutir como minhas habilidades podem beneficiar sua equipe. Estou disponivel para uma entrevista conforme sua conveniencia.\n\nAgradeco a atencao dispensada e aguardo um retorno.\n\n\\closing{Atenciosamente,}\n\n\\end{letter}\n\n\\end{document}"
+    }
+  },
+  {
+    "id": "relatorio-tecnico",
+    "name": "Relatorio Tecnico",
+    "description": "Template para relatorios tecnicos e documentacao.",
+    "category": "professional",
+    "tags": [
+      "relatorio",
+      "tecnico",
+      "documentacao"
+    ],
+    "icon": "document",
+    "files": {
+      "main.tex": "\\documentclass[12pt,a4paper]{report}\n\\usepackage[utf8]{inputenc}\n\\usepackage[T1]{fontenc}\n\\usepackage[portuguese]{babel}\n\\usepackage{graphicx}\n\\usepackage{amsmath}\n\\usepackage{geometry}\n\\usepackage{fancyhdr}\n\\usepackage{hyperref}\n\\usepackage{listings}\n\\usepackage{xcolor}\n\\usepackage{booktabs}\n\n\\geometry{left=2.5cm, right=2.5cm, top=3cm, bottom=2.5cm}\n\n% Configuracao de cabecalho/rodape\n\\pagestyle{fancy}\n\\fancyhf{}\n\\fancyhead[L]{\\leftmark}\n\\fancyhead[R]{Nome da Empresa}\n\\fancyfoot[C]{\\thepage}\n\\renewcommand{\\headrulewidth}{0.4pt}\n\\renewcommand{\\footrulewidth}{0.4pt}\n\n% Configuracao de codigo\n\\lstset{\n    basicstyle=\\ttfamily\\small,\n    backgroundcolor=\\color{gray!10},\n    frame=single,\n    breaklines=true,\n    numbers=left,\n    numberstyle=\\tiny\\color{gray},\n}\n\n\\begin{document}\n\n% Capa\n\\begin{titlepage}\n\\begin{center}\n\\vspace*{1cm}\n\n\\fbox{\\parbox{0.3\\textwidth}{\\centering [Logo]}}\\\\[1cm]\n\n\\textbf{\\Large NOME DA EMPRESA / INSTITUICAO}\n\n\\vspace{2cm}\n\n\\textbf{\\LARGE RELATORIO TECNICO}\n\n\\vspace{1cm}\n\n\\textbf{\\huge Titulo do Relatorio}\n\n\\vspace{2cm}\n\n\\textbf{Versao 1.0}\n\n\\vfill\n\n\\begin{tabular}{ll}\n\\textbf{Autor:} & Nome do Autor \\\\\n\\textbf{Revisor:} & Nome do Revisor \\\\\n\\textbf{Data:} & \\today \\\\\n\\textbf{Documento:} & REL-2024-001 \\\\\n\\end{tabular}\n\n\\end{center}\n\\end{titlepage}\n\n% Controle de versoes\n\\chapter*{Historico de Revisoes}\n\\begin{tabular}{llll}\n\\toprule\n\\textbf{Versao} & \\textbf{Data} & \\textbf{Autor} & \\textbf{Descricao} \\\\\n\\midrule\n1.0 & \\today & Nome & Versao inicial \\\\\n\\bottomrule\n\\end{tabular}\n\n% Sumario\n\\tableofcontents\n\\listoffigures\n\\listoftables\n\n% Conteudo\n\\chapter{Introducao}\n\n\\section{Objetivo}\nDescrever o objetivo deste relatorio tecnico.\n\n\\section{Escopo}\nDefinir o escopo e as limitacoes do documento.\n\n\\section{Publico-Alvo}\nIdentificar o publico para quem este relatorio e destinado.\n\n\\section{Referencias}\nListar documentos relacionados e referencias utilizadas.\n\n\\chapter{Descricao do Sistema}\n\n\\section{Visao Geral}\nApresentar uma visao geral do sistema ou projeto.\n\n\\section{Arquitetura}\nDescrever a arquitetura do sistema.\n\n\\begin{figure}[h]\n\\centering\n\\fbox{\\parbox{0.8\\textwidth}{\\centering [Diagrama de Arquitetura]}}\n\\caption{Arquitetura do Sistema}\n\\label{fig:arquitetura}\n\\end{figure}\n\n\\section{Componentes}\nDetalhar os principais componentes.\n\n\\chapter{Especificacoes Tecnicas}\n\n\\section{Requisitos de Hardware}\n\\begin{itemize}\n    \\item Processador: Minimo X GHz\n    \\item Memoria: Minimo X GB RAM\n    \\item Armazenamento: Minimo X GB\n\\end{itemize}\n\n\\section{Requisitos de Software}\n\\begin{itemize}\n    \\item Sistema Operacional: Windows/Linux/macOS\n    \\item Dependencias: Lista de dependencias\n\\end{itemize}\n\n\\section{Configuracao}\nExemplo de configuracao:\n\n\\begin{lstlisting}[language=Python, caption=Exemplo de codigo]\ndef configurar_sistema():\n    config = {\n        'parametro1': 'valor1',\n        'parametro2': 'valor2'\n    }\n    return config\n\\end{lstlisting}\n\n\\chapter{Resultados e Analise}\n\n\\section{Metricas}\n\\begin{table}[h]\n\\centering\n\\begin{tabular}{lcc}\n\\toprule\n\\textbf{Metrica} & \\textbf{Valor} & \\textbf{Meta} \\\\\n\\midrule\nDesempenho & 95\\% & 90\\% \\\\\nDisponibilidade & 99.5\\% & 99\\% \\\\\nTempo de Resposta & 200ms & 500ms \\\\\n\\bottomrule\n\\end{tabular}\n\\caption{Metricas do Sistema}\n\\label{tab:metricas}\n\\end{table}\n\n\\section{Analise}\nAnalise dos resultados obtidos.\n\n\\chapter{Conclusao}\nConclusoes e recomendacoes.\n\n\\appendix\n\\chapter{Anexos}\nMaterial complementar.\n\n\\end{document}"
+    }
+  },
+  {
+    "id": "fatura-invoice",
+    "name": "Fatura / Invoice",
+    "description": "Template para faturas e notas de servico.",
+    "category": "professional",
+    "tags": [
+      "fatura",
+      "invoice",
+      "financeiro"
+    ],
+    "icon": "currency",
+    "files": {
+      "main.tex": "\\documentclass[11pt,a4paper]{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage[T1]{fontenc}\n\\usepackage[portuguese]{babel}\n\\usepackage{geometry}\n\\usepackage{array}\n\\usepackage{booktabs}\n\\usepackage{xcolor}\n\\usepackage{graphicx}\n\\usepackage{fancyhdr}\n\\usepackage{colortbl}\n\n\\geometry{left=2cm, right=2cm, top=2cm, bottom=2cm}\n\\pagestyle{empty}\n\n\\definecolor{headercolor}{HTML}{2C3E50}\n\\definecolor{accentcolor}{HTML}{3498DB}\n\n\\begin{document}\n\n% Cabecalho\n\\begin{minipage}[t]{0.5\\textwidth}\n\\textbf{\\Large\\color{headercolor} SUA EMPRESA LTDA}\\\\[0.3cm]\nRua Exemplo, 123\\\\\nBairro - Cidade/UF\\\\\nCEP: 00000-000\\\\\nCNPJ: 00.000.000/0001-00\\\\\nTel: (00) 0000-0000\\\\\ncontato@suaempresa.com\n\\end{minipage}\n\\hfill\n\\begin{minipage}[t]{0.4\\textwidth}\n\\raggedleft\n{\\Huge\\color{accentcolor}\\textbf{FATURA}}\\\\[0.5cm]\n\\begin{tabular}{rl}\n\\textbf{Numero:} & 2024-001 \\\\\n\\textbf{Data:} & \\today \\\\\n\\textbf{Vencimento:} & 15/02/2024 \\\\\n\\end{tabular}\n\\end{minipage}\n\n\\vspace{1cm}\n\\noindent\\rule{\\textwidth}{0.4pt}\n\\vspace{0.5cm}\n\n% Dados do Cliente\n\\noindent\\textbf{\\large\\color{headercolor} FATURAR PARA:}\\\\[0.3cm]\n\\begin{tabular}{@{}ll}\n\\textbf{Cliente:} & Nome do Cliente \\\\\n\\textbf{Endereco:} & Rua do Cliente, 456 - Cidade/UF \\\\\n\\textbf{CNPJ/CPF:} & 00.000.000/0001-00 \\\\\n\\textbf{Email:} & cliente@email.com \\\\\n\\end{tabular}\n\n\\vspace{1cm}\n\n% Tabela de Itens\n\\begin{center}\n\\begin{tabular}{|p{8cm}|c|r|r|}\n\\hline\n\\rowcolor{headercolor}\n\\textcolor{white}{\\textbf{Descricao}} &\n\\textcolor{white}{\\textbf{Qtd}} &\n\\textcolor{white}{\\textbf{Valor Unit.}} &\n\\textcolor{white}{\\textbf{Total}} \\\\\n\\hline\nServico de Consultoria - 40 horas & 40 & R\\$ 150,00 & R\\$ 6.000,00 \\\\\n\\hline\nDesenvolvimento de Sistema Web & 1 & R\\$ 8.000,00 & R\\$ 8.000,00 \\\\\n\\hline\nSuporte Tecnico Mensal & 1 & R\\$ 500,00 & R\\$ 500,00 \\\\\n\\hline\nHospedagem Cloud (anual) & 1 & R\\$ 1.200,00 & R\\$ 1.200,00 \\\\\n\\hline\n\\end{tabular}\n\\end{center}\n\n\\vspace{0.5cm}\n\n% Totais\n\\begin{flushright}\n\\begin{tabular}{|l|r|}\n\\hline\nSubtotal & R\\$ 15.700,00 \\\\\n\\hline\nDesconto (5\\%) & -R\\$ 785,00 \\\\\n\\hline\n\\rowcolor{accentcolor!20}\n\\textbf{TOTAL} & \\textbf{R\\$ 14.915,00} \\\\\n\\hline\n\\end{tabular}\n\\end{flushright}\n\n\\vspace{1cm}\n\n% Informacoes de Pagamento\n\\noindent\\textbf{\\large\\color{headercolor} INFORMACOES DE PAGAMENTO:}\\\\[0.3cm]\n\\begin{tabular}{@{}ll}\n\\textbf{Banco:} & Banco Exemplo \\\\\n\\textbf{Agencia:} & 0001 \\\\\n\\textbf{Conta Corrente:} & 12345-6 \\\\\n\\textbf{PIX (CNPJ):} & 00.000.000/0001-00 \\\\\n\\end{tabular}\n\n\\vspace{1cm}\n\n% Observacoes\n\\noindent\\textbf{\\large\\color{headercolor} OBSERVACOES:}\\\\[0.3cm]\n\\begin{itemize}\n    \\item Pagamento via boleto, transferencia ou PIX.\n    \\item Juros de 2\\% ao mes para pagamentos em atraso.\n    \\item Duvidas: contato@suaempresa.com\n\\end{itemize}\n\n\\vfill\n\n\\begin{center}\n\\textit{\\small Agradecemos a preferencia!}\n\\end{center}\n\n\\end{document}"
+    }
+  }
+]
