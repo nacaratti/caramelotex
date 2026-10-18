@@ -1,5 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "echo \"Landing estatica: nada para instalar\"",
+  "buildCommand": "echo \"Landing estatica: nada para compilar\"",
+  "outputDirectory": "site",
   "cleanUrls": true,
   "headers": [
     {
