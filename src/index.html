@@ -6,386 +6,186 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CarameloTeX</title>
 
-    <!-- Tailwind CSS -->
+    <script src="/theme-init.js"></script>
     <link rel="stylesheet" href="./styles/tailwind.css">
-
-    <!-- CodeMirror 5, PDF.js, JSZip, pako (empacotados localmente) -->
-    <script type="module" src="./vendor/editor-libs.js"></script>
-    <script type="module" src="./vendor/tauri-bridge.js"></script>
-
-    <!-- Custom Styles -->
     <link rel="stylesheet" href="styles/main.css">
-    <style>
-        /* Custom Scrollbar for file list */
-        #fileList::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        #fileList::-webkit-scrollbar-track {
-            background: #1f2937;
-        }
-
-        #fileList::-webkit-scrollbar-thumb {
-            background: #4b5563;
-            border-radius: 3px;
-        }
-
-        #fileList::-webkit-scrollbar-thumb:hover {
-            background: #6b7280;
-        }
-    </style>
-
 </head>
 
-<body class="bg-gray-900 text-gray-100 h-screen overflow-hidden">
+<body class="h-screen overflow-hidden flex flex-col bg-bg text-ink">
 
-    <!-- Header -->
-    <header class="bg-latex-dark border-b border-gray-700 px-6 py-3 flex items-center justify-between">
-        <div class="flex items-center space-x-4">
-            <!-- Toggle Files Panel Button -->
-            <button id="toggleFilesBtn" class="text-gray-400 hover:text-latex-green transition-colors duration-200"
-                title="Mostrar/Esconder Arquivos">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16">
-                    </path>
+    <!-- Cabeçalho -->
+    <header class="h-12 flex-shrink-0 flex items-center justify-between gap-4 px-3 bg-panel border-b border-line">
+        <div class="flex items-center gap-2 min-w-0">
+            <button id="toggleFilesBtn" class="icon-btn" title="Mostrar ou esconder os arquivos (Ctrl+B)">
+                <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="16" rx="2" />
+                    <path d="M9 4v16" />
                 </svg>
             </button>
-
-            <h1 class="text-2xl font-bold text-latex-green">CarameloTeX</h1>
-            <a href="projects.html"
-                class="text-sm text-gray-400 hover:text-white hover:underline transition-colors flex items-center space-x-1">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-                </svg>
-                <span>Projetos</span>
-            </a>
-            <span id="projectName" class="text-sm text-gray-300 font-medium truncate max-w-xs"></span>
-            <button id="revealProjectBtn" class="text-gray-500 hover:text-white transition-colors" title="Abrir a pasta do projeto no Explorer">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+            <a href="projects.html" class="brand text-lg text-ink hover:text-accent-strong px-1" title="Voltar para os projetos">CarameloTeX</a>
+            <span class="text-line">/</span>
+            <span id="projectName" class="text-sm font-medium truncate max-w-xs"></span>
+            <button id="revealProjectBtn" class="icon-btn" title="Abrir a pasta do projeto no Explorer">
+                <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
                 </svg>
             </button>
         </div>
 
-        <div class="flex items-center space-x-3">
-            <!-- Compilador -->
-            <select id="engineSelect" title="Compilador LaTeX"
-                class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg px-2 py-2 focus:outline-none focus:border-latex-green">
+        <div class="flex items-center gap-2">
+            <select id="engineSelect" class="select" title="Compilador LaTeX">
                 <option value="pdflatex">pdfLaTeX</option>
                 <option value="xelatex">XeLaTeX</option>
                 <option value="lualatex">LuaLaTeX</option>
             </select>
 
-            <!-- Compile Button -->
-            <button id="compileBtn"
-                class="bg-latex-green hover:bg-teal-600 text-white px-6 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-                    </path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            <label class="flex items-center gap-2 px-1 text-sm text-muted cursor-pointer select-none"
+                title="Compilar sozinho enquanto você escreve">
+                <input type="checkbox" id="autoCompile" class="sr-only">
+                <span class="switch" aria-hidden="true"></span>
+                Auto
+            </label>
+
+            <button id="compileBtn" class="btn btn-primary" title="Salvar e compilar (Ctrl+S)">
+                <svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" />
                 </svg>
                 <span id="compileBtnText">Compilar</span>
             </button>
 
-            <!-- Auto-compile Toggle -->
-            <label class="flex items-center space-x-2 cursor-pointer">
-                <input type="checkbox" id="autoCompile" class="sr-only peer">
-                <div
-                    class="relative w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-latex-green">
-                </div>
-                <span class="text-sm text-gray-300">Auto</span>
-            </label>
-
-            <!-- Salvar PDF -->
-            <button id="downloadBtn" title="Salvar PDF como..."
-                class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled>
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
-                    </path>
+            <button id="downloadBtn" class="icon-btn" title="Salvar PDF como..." disabled>
+                <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14" />
                 </svg>
             </button>
 
+            <button id="themeBtn" class="icon-btn" title="Tema">
+                <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" />
+                </svg>
+            </button>
         </div>
     </header>
 
-    <!-- Main Content -->
-    <main class="flex h-[calc(100vh-61px)]">
+    <!-- Área principal -->
+    <main class="flex-1 flex min-h-0">
 
-        <!-- Files Panel (collapsible) -->
-        <aside id="filesPanel" class="w-64 bg-latex-gray border-r border-gray-700 flex flex-col hidden">
-            <!-- Panel Header -->
-            <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-                <span class="text-sm font-semibold text-gray-300">Arquivos do Projeto</span>
-                <div class="flex items-center space-x-2">
-                    <button id="addFolderBtn" class="text-gray-400 hover:text-latex-green transition-colors"
-                        title="Nova Pasta">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z">
-                            </path>
+        <!-- Barra lateral -->
+        <aside id="filesPanel" class="w-60 flex-shrink-0 flex flex-col bg-panel2 border-r border-line">
+            <div class="pane-header bg-panel2">
+                <div class="tabs" role="tablist" aria-label="Barra lateral">
+                    <button id="tabFiles" class="tab" role="tab" aria-selected="true" aria-controls="fileList">Arquivos</button>
+                    <button id="tabOutline" class="tab" role="tab" aria-selected="false" aria-controls="outlineList">Sumário</button>
+                </div>
+                <div id="fileActions" class="flex items-center">
+                    <button id="addFolderBtn" class="icon-btn" title="Nova pasta">
+                        <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5" />
                         </svg>
                     </button>
-                    <button id="addFileBtn" class="text-gray-400 hover:text-latex-green transition-colors"
-                        title="Adicionar Arquivo">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4">
-                            </path>
+                    <button id="addFileBtn" class="icon-btn" title="Adicionar arquivos do computador">
+                        <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M12 11v6M9 14h6" />
                         </svg>
                     </button>
-                    <button id="uploadZipBtn" class="text-gray-400 hover:text-latex-green transition-colors"
-                        title="Importar projeto ZIP">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12">
-                            </path>
+                    <button id="uploadZipBtn" class="icon-btn" title="Importar arquivos de um .zip">
+                        <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 15V4m0 0-4 4m4-4 4 4M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" />
                         </svg>
                     </button>
                 </div>
             </div>
 
-            <!-- File List -->
-            <div id="fileList" class="flex-1 overflow-auto p-2 space-y-1">
-                <!-- Content generated by JS -->
-            </div>
+            <div id="fileList" class="flex-1 overflow-y-auto p-1.5" role="tabpanel"></div>
+            <div id="outlineList" class="hidden flex-1 overflow-y-auto p-1.5" role="tabpanel"></div>
 
-
-            <!-- Upload Input (hidden) -->
             <input type="file" id="fileUploadInput" class="hidden" multiple>
-
-            <!-- ZIP Upload Input (hidden) -->
             <input type="file" id="zipUploadInput" class="hidden" accept=".zip">
         </aside>
 
-        <!-- Left Panel - Editor -->
-        <div id="editorPanel" class="w-1/2 border-r border-gray-700 flex flex-col min-w-[300px]">
-            <div class="bg-latex-gray px-4 py-2 border-b border-gray-700 flex items-center justify-between">
-                <span class="text-sm font-semibold text-gray-300">Editor LaTeX</span>
-                <div class="flex items-center space-x-2 text-xs text-gray-400">
-                    <span id="editorStatus">Pronto</span>
-                    <span>|</span>
-                    <span id="lineCount">Linhas: 1</span>
-                </div>
-            </div>
+        <!-- Editor -->
+        <section id="editorPanel" class="w-1/2 flex flex-col min-w-[300px] bg-panel">
+            <div id="editorToolbar" class="toolbar" role="toolbar" aria-label="Formatação"></div>
+            <div id="editor" class="flex-1 min-h-0 overflow-hidden"></div>
+        </section>
 
-            <div id="editor" class="flex-1 overflow-auto bg-gray-800 min-h-0"></div>
+        <div id="resizer"></div>
 
-            <!-- AI Chat Panel -->
-            <div id="aiChatPanel" class="bg-latex-gray border-t border-gray-700 flex flex-col transition-all duration-300" style="height: 40px;">
-                <!-- Chat Header -->
-                <div class="px-3 py-2 flex items-center justify-between cursor-pointer select-none" id="aiChatToggle">
-                    <div class="flex items-center space-x-2">
-                        <svg id="aiChatToggleIcon" class="w-4 h-4 text-gray-400 transition-transform duration-300" style="transform: rotate(180deg);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-                        </svg>
-                        <svg class="w-4 h-4 text-latex-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                        </svg>
-                        <span class="text-sm font-medium text-gray-300">Assistente IA</span>
-                        <span id="aiProviderBadge" class="hidden text-xs px-1.5 py-0.5 bg-gray-700 rounded text-gray-400"></span>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <button id="aiConfigBtn" class="text-gray-400 hover:text-latex-green transition-colors p-1" title="Configurar IA">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            </svg>
-                        </button>
-                        <button id="aiChatClear" class="text-gray-400 hover:text-yellow-400 transition-colors p-1" title="Limpar conversa">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Chat Content (collapsible) -->
-                <div id="aiChatContent" class="hidden flex-1 flex flex-col min-h-0">
-                    <!-- Unconfigured State -->
-                    <div id="aiChatUnconfigured" class="flex-1 flex items-center justify-center p-4">
-                        <div class="text-center">
-                            <svg class="w-10 h-10 text-gray-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
-                            </svg>
-                            <p class="text-gray-500 text-sm mb-2">Configure sua chave de API</p>
-                            <button id="aiConfigBtnEmpty" class="text-xs px-3 py-1.5 bg-latex-green hover:bg-teal-600 rounded text-white transition-colors">
-                                Configurar IA
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Configured State -->
-                    <div id="aiChatConfigured" class="hidden flex-1 flex flex-col min-h-0">
-                        <!-- Messages -->
-                        <div id="aiChatMessages" class="flex-1 overflow-auto p-2 space-y-2 min-h-0">
-                            <div class="text-center text-gray-500 text-xs py-4">
-                                Pergunte sobre LaTeX, peca sugestoes ou ajuda com erros.
-                            </div>
-                        </div>
-
-                        <!-- Input -->
-                        <div class="p-2 border-t border-gray-700">
-                            <div class="flex items-center space-x-2">
-                                <input type="text" id="aiChatInput"
-                                    class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-latex-green"
-                                    placeholder="Digite sua pergunta...">
-                                <button id="aiChatSend"
-                                    class="bg-latex-green hover:bg-teal-600 text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Resizer Handle -->
-        <div id="resizer"
-            class="w-1 bg-gray-700 hover:bg-latex-green cursor-col-resize transition-colors flex flex-col justify-center items-center z-10 relative group">
-            <!-- Visual indicator -->
-            <div class="h-8 w-1 bg-gray-500 rounded group-hover:bg-white transition-colors"></div>
-        </div>
-
-        <!-- Right Panel - PDF Viewer -->
-        <div id="viewerPanel" class="w-1/2 flex flex-col bg-gray-800 min-w-[300px]">
-            <div class="bg-latex-gray px-4 py-2 border-b border-gray-700 flex items-center justify-between">
-                <span class="text-sm font-semibold text-gray-300">Visualização PDF</span>
-                <div class="flex items-center space-x-3">
-                    <button id="toggleLogsBtn" class="text-gray-400 hover:text-white transition-colors"
-                        title="Ver Logs de Compilação">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                    </button>
-                    <span id="compileStatus" class="text-xs text-gray-400">Aguardando compilação...</span>
+        <!-- PDF -->
+        <section id="viewerPanel" class="w-1/2 flex flex-col min-w-[300px] bg-pdf">
+            <div class="pane-header">
+                <div class="flex items-center gap-2 min-w-0">
                     <div id="loadingSpinner" class="hidden">
-                        <svg class="animate-spin h-5 w-5 text-latex-green" xmlns="http://www.w3.org/2000/svg"
-                            fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
-                            </circle>
-                            <path class="opacity-75" fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                            </path>
+                        <svg class="animate-spin h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z"></path>
                         </svg>
                     </div>
+                    <span id="compileStatus" class="truncate">Aguardando compilação</span>
+                </div>
+                <div class="flex items-center">
+                    <button id="zoomOutBtn" class="icon-btn" title="Diminuir zoom (Ctrl + roda do mouse)">
+                        <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12" /></svg>
+                    </button>
+                    <span id="zoomLabel" class="w-11 text-center tabular-nums text-xs">100%</span>
+                    <button id="zoomInBtn" class="icon-btn" title="Aumentar zoom (Ctrl + roda do mouse)">
+                        <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
+                    </button>
+                    <button id="zoomFitBtn" class="icon-btn" title="Ajustar à largura" aria-pressed="true">
+                        <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3" /></svg>
+                    </button>
+                    <span class="w-px h-5 bg-line mx-1"></span>
+                    <button id="toggleLogsBtn" class="icon-btn" title="Ver erros e avisos"></button>
                 </div>
             </div>
 
-            <div class="flex-1 overflow-auto p-4" id="pdfViewerContainer">
-                <div id="pdfPlaceholder" class="h-full flex items-center justify-center text-gray-500">
+            <div class="flex-1 overflow-auto" id="pdfViewerContainer">
+                <div id="pdfPlaceholder" class="h-full flex items-center justify-center text-muted">
                     <div class="text-center">
-                        <svg class="w-24 h-24 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor"
-                            viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
-                            </path>
-                        </svg>
-                        <p class="text-lg">Clique em "Compilar" para gerar o PDF</p>
+                        <img src="/img/caramelo_loading.png" alt="" class="h-24 mx-auto mb-4 opacity-80">
+                        <p>Clique em <strong>Compilar</strong> para gerar o PDF.</p>
                     </div>
                 </div>
-                <div id="pdfPagesContainer" class="hidden space-y-4"></div>
+                <div id="pdfPagesContainer" class="hidden"></div>
             </div>
 
-            <!-- Logs Container (Hidden by default) -->
-            <div id="logsContainer" class="hidden flex-1 overflow-auto p-4 bg-gray-900 font-mono text-sm">
+            <div id="logsContainer" class="hidden flex-1 overflow-auto p-4 bg-bg">
                 <div id="logsContent" class="space-y-2">
-                    <p class="text-gray-500 text-center mt-10">Nenhum log disponível.</p>
+                    <p class="text-muted text-center mt-10">Nenhum erro ou aviso.</p>
                 </div>
             </div>
-        </div>
-
+        </section>
     </main>
 
-    <!-- AI Config Modal -->
-    <div id="aiConfigModal" class="fixed inset-0 bg-black bg-opacity-75 hidden z-50 flex items-center justify-center p-4">
-        <div class="bg-gray-800 rounded-xl max-w-md w-full overflow-hidden">
-            <div class="flex justify-between items-center p-4 border-b border-gray-700">
-                <h3 class="text-lg font-bold text-gray-200">Configurar Assistente IA</h3>
-                <button id="closeAiConfigModal" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-700">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
-            </div>
-
-            <div class="p-4 space-y-4">
-                <div>
-                    <label class="block text-sm text-gray-300 mb-1">Provedor de IA</label>
-                    <select id="aiProvider" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-gray-200 focus:outline-none focus:border-latex-green">
-                        <option value="openai">OpenAI (GPT-4o mini)</option>
-                        <option value="gemini">Google Gemini (1.5 Flash)</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label class="block text-sm text-gray-300 mb-1">Chave de API</label>
-                    <input type="password" id="aiApiKey"
-                        class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-gray-200 placeholder-gray-500 focus:outline-none focus:border-latex-green"
-                        placeholder="sk-... ou AIza...">
-                    <p class="text-xs text-gray-500 mt-1">Sua chave fica salva apenas no seu navegador.</p>
-                </div>
-
-                <div id="aiConfigTestStatus" class="text-sm"></div>
-            </div>
-
-            <div class="p-4 border-t border-gray-700 flex justify-between">
-                <button id="clearAiConfig" class="px-3 py-2 text-red-400 hover:text-red-300 text-sm transition-colors">
-                    Remover Chave
-                </button>
-                <div class="flex gap-2">
-                    <button id="testAiConfig" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-300 transition-colors">
-                        Testar
-                    </button>
-                    <button id="saveAiConfig" class="px-4 py-2 bg-latex-green hover:bg-teal-600 rounded-lg text-sm text-white transition-colors">
-                        Salvar
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Toast Notifications -->
-    <div id="toastContainer" class="fixed bottom-4 right-4 space-y-2 z-50"></div>
-
-    <!-- Action Menu (Context/Dropdown) -->
-    <div id="actionMenu"
-        class="hidden fixed bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 py-1 min-w-[160px]">
-        <!-- Content injected by JS -->
-    </div>
-
-    <!-- Loading Overlay -->
-    <div id="editorLoadingOverlay" class="fixed inset-0 bg-gray-900 bg-opacity-90 flex items-center justify-center z-50">
-        <div class="text-center">
-            <svg class="animate-spin h-12 w-12 text-latex-green mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    <!-- Barra de status -->
+    <footer class="status-bar flex-shrink-0">
+        <span id="editorStatus">Pronto</span>
+        <span id="lineCount">Linhas: 1</span>
+        <span class="flex-1"></span>
+        <button id="spellBtn" class="status-toggle" aria-pressed="true">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 15 7.5 6 11 15M5.3 12h4.4M13 13l3 3 5-7" />
             </svg>
-            <p class="text-gray-300 text-lg">Carregando projeto...</p>
+            Ortografia
+        </button>
+        <button id="wordCount" class="hover:text-ink" title="Ver a contagem detalhada por seção"></button>
+        <span id="pageCount"></span>
+    </footer>
+
+    <div id="toastContainer" class="fixed bottom-10 right-4 space-y-2 z-50"></div>
+
+    <!-- Menu de contexto dos arquivos -->
+    <div id="actionMenu" class="menu hidden fixed z-50"></div>
+
+    <!-- Carregando -->
+    <div id="editorLoadingOverlay" class="fixed inset-0 bg-bg flex items-center justify-center z-50">
+        <div class="text-center">
+            <img src="/img/caramelo_loading.png" alt="" class="h-28 mx-auto mb-4">
+            <p class="text-muted">Abrindo o projeto...</p>
         </div>
     </div>
 
-    <!-- Scripts -->
-    <script defer src="/js/storage.js"></script>
-    <script defer src="/js/synctex-parser.js"></script>
-    <script defer src="/js/app.js"></script>
-    <script defer src="/js/ai-assistant.js"></script>
-    <script defer src="/js/ai-chat.js"></script>
-
-    <script>
-        // Bind do botao de config vazio (após os scripts com defer)
-        document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('aiConfigBtnEmpty')?.addEventListener('click', () => AIChat.openConfigModal());
-        });
-    </script>
+    <script type="module" src="./js/app.js"></script>
 </body>
 
 </html>

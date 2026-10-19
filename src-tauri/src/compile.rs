@@ -1,8 +1,8 @@
 //! Compilação local com latexmk (ou, sem latexmk, uma sequência manual
 //! engine → bibtex/biber → engine → engine).
 //!
-//! A resposta mantém o formato do antigo servidor latex-on-http: PDF e
-//! `.synctex.gz` em base64, para o `app.js` continuar usando pako + SyncTexParser.
+//! A resposta traz só os nomes do PDF e do `.synctex.gz` gerados; a interface
+//! lê os bytes com `read_build_file` (binário, sem base64).
 
 use std::ffi::OsString;
 use std::fs;
@@ -14,7 +14,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
-use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
@@ -36,9 +35,9 @@ pub struct CompileState {
 #[serde(rename_all = "camelCase")]
 pub struct CompileResult {
     ok: bool,
-    /// PDF em base64 (presente mesmo com erros, se o LaTeX chegou a gerar um)
-    pdf: Option<String>,
-    synctex: Option<String>,
+    /// Nome do PDF na pasta de build (presente mesmo com erros, se o LaTeX chegou a gerar um)
+    pdf_file: Option<String>,
+    synctex_file: Option<String>,
     /// Conteúdo do .log do LaTeX (ou a saída do processo, se não houver .log)
     log: String,
     /// Saída do latexmk/bibtex/biber
@@ -165,13 +164,12 @@ fn engine_flag(engine: &str) -> Result<&'static str, String> {
     }
 }
 
-fn read_if_newer(path: &Path, since: SystemTime) -> Option<Vec<u8>> {
-    let modified = fs::metadata(path).and_then(|m| m.modified()).ok()?;
+fn is_newer(path: &Path, since: SystemTime) -> bool {
     // Ignora PDF/SyncTeX de uma compilação anterior que falhou antes de gravar.
-    if modified + Duration::from_secs(1) < since {
-        return None;
-    }
-    fs::read(path).ok()
+    fs::metadata(path)
+        .and_then(|m| m.modified())
+        .map(|modified| modified + Duration::from_secs(1) >= since)
+        .unwrap_or(false)
 }
 
 fn compile_blocking(
@@ -265,16 +263,13 @@ fn compile_blocking(
     // pula a compilação quando nada mudou). Com falha, só aceita o que esta
     // execução gravou, para não mostrar o PDF de uma compilação antiga.
     let succeeded = matches!(end, RunEnd::Exited(true));
-    let read_output = |name: String| {
-        let path = outdir.join(name);
-        if succeeded {
-            fs::read(&path).ok()
-        } else {
-            read_if_newer(&path, started_at)
-        }
+    let output_file = |name: String| {
+        let path = outdir.join(&name);
+        let valid = if succeeded { path.is_file() } else { is_newer(&path, started_at) };
+        valid.then_some(name)
     };
-    let pdf = read_output(format!("{stem}.pdf"));
-    let synctex = read_output(format!("{stem}.synctex.gz"));
+    let pdf = output_file(format!("{stem}.pdf"));
+    let synctex = output_file(format!("{stem}.synctex.gz"));
 
     let (ok, cancelled, timed_out) = match end {
         RunEnd::Exited(success) => (success && pdf.is_some(), false, false),
@@ -284,8 +279,8 @@ fn compile_blocking(
 
     Ok(CompileResult {
         ok,
-        pdf: pdf.map(|b| B64.encode(b)),
-        synctex: synctex.map(|b| B64.encode(b)),
+        pdf_file: pdf,
+        synctex_file: synctex,
         log,
         output: job.output,
         engine,
@@ -329,6 +324,21 @@ fn cancel_running(state: &CompileState) {
     while state.pid.lock().unwrap().is_some() && Instant::now() < deadline {
         thread::sleep(Duration::from_millis(20));
     }
+}
+
+/// Lê um arquivo gerado na pasta de build (PDF ou SyncTeX) e devolve os bytes
+/// sem conversão para base64.
+#[tauri::command]
+pub fn read_build_file(name: String, state: State<'_, AppState>) -> Result<tauri::ipc::Response, String> {
+    let allowed = (name.ends_with(".pdf") || name.ends_with(".synctex.gz"))
+        && !name.contains(['/', '\\', ':'])
+        && !name.starts_with('.');
+    if !allowed {
+        return Err(format!("Arquivo de build inválido: {name}"));
+    }
+    let root = current_root(&state)?;
+    let bytes = fs::read(root.join(BUILD_DIR).join(&name)).map_err(|e| format!("Erro ao ler {name}: {e}"))?;
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 #[tauri::command]
@@ -424,11 +434,11 @@ mod tests {
                 format!("{}/{main}", root.file_name().unwrap().to_string_lossy()),
                 engine,
                 result.ok,
-                result.pdf.is_some(),
-                result.synctex.is_some(),
+                result.pdf_file.is_some(),
+                result.synctex_file.is_some(),
                 result.duration_ms
             );
-            if !(result.ok && result.pdf.is_some() && result.synctex.is_some()) {
+            if !(result.ok && result.pdf_file.is_some() && result.synctex_file.is_some()) {
                 failures.push(format!("{}/{main}:\n{}\n{}", root.display(), log_tail(&result), result.output));
             }
         }
@@ -442,10 +452,10 @@ mod tests {
         let dir = fresh_dir("sem-mudancas");
         fs::write(dir.join("main.tex"), "\\documentclass{article}\n\\begin{document}\nOi\n\\end{document}\n").unwrap();
         let first = compile(&dir, "main.tex", "pdflatex", Duration::from_secs(120));
-        assert!(first.ok && first.pdf.is_some());
+        assert!(first.ok && first.pdf_file.is_some());
         std::thread::sleep(Duration::from_secs(2));
         let second = compile(&dir, "main.tex", "pdflatex", Duration::from_secs(120));
-        assert!(second.ok && second.pdf.is_some() && second.synctex.is_some(), "{}", second.output);
+        assert!(second.ok && second.pdf_file.is_some() && second.synctex_file.is_some(), "{}", second.output);
     }
 
     #[test]

@@ -1,0 +1,122 @@
+/*
+ * theme.css - Tokens de cor e tipografia do CarameloTeX (temas claro e escuro).
+ * O tema é escolhido por <html data-theme="light|dark">, definido por
+ * public/theme-init.js antes da primeira pintura e por js/theme.js depois.
+ */
+
+@font-face {
+    font-family: 'Latin Modern Roman';
+    src: url('/fonts/lmroman10-bold.otf') format('opentype');
+    font-weight: 700;
+    font-display: swap;
+}
+
+:root {
+    --font-ui: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', Consolas, monospace;
+    --font-brand: 'Latin Modern Roman', Georgia, serif;
+
+    --radius: 8px;
+    --radius-sm: 5px;
+
+    /* Claro: papel e tinta marrom, destaque caramelo */
+    --bg: #fbf7f1;
+    --panel: #ffffff;
+    --panel-2: #f6efe5;
+    --hover: #f1e7da;
+    --text: #2a1a0e;
+    --text-muted: #7a6858;
+    --border: #e8dccb;
+    --accent: #cd8d45;
+    --accent-strong: #9a5a1c;
+    --accent-soft: rgba(205, 141, 69, 0.16);
+    --primary: #4a2c17;
+    --primary-hover: #5e3a20;
+    --primary-text: #ffffff;
+    --danger: #c2410c;
+    --warning: #b45309;
+    --success: #15803d;
+    --shadow: 0 1px 2px rgba(74, 44, 23, 0.08), 0 4px 16px rgba(74, 44, 23, 0.06);
+    --pdf-bg: #ebe4da;
+
+    --ed-bg: #ffffff;
+    --ed-text: #2a1a0e;
+    --ed-gutter-bg: #fbf7f1;
+    --ed-gutter-text: #b2a291;
+    --ed-active-line: rgba(205, 141, 69, 0.08);
+    --ed-selection: rgba(205, 141, 69, 0.30);
+    --ed-match: rgba(205, 141, 69, 0.18);
+    --ed-cursor: #9a5a1c;
+    --ed-command: #a3501c;
+    --ed-keyword: #7c3aed;
+    --ed-argument: #0f766e;
+    --ed-bracket: #8a7868;
+    --ed-comment: #9a8b7b;
+    --ed-math: #1d4ed8;
+    --ed-number: #b45309;
+    --ed-error: #c2410c;
+
+    color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+    /* Escuro: grafite quente, mesmo destaque caramelo */
+    --bg: #1c1917;
+    --panel: #262220;
+    --panel-2: #211d1b;
+    --hover: #322c28;
+    --text: #efe6da;
+    --text-muted: #a69685;
+    --border: #3a332d;
+    --accent: #d99a55;
+    --accent-strong: #ebb274;
+    --accent-soft: rgba(217, 154, 85, 0.18);
+    --primary: #d99a55;
+    --primary-hover: #e6aa69;
+    --primary-text: #1c1917;
+    --danger: #fb923c;
+    --warning: #fbbf24;
+    --success: #4ade80;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
+    --pdf-bg: #141110;
+
+    --ed-bg: #1f1b19;
+    --ed-text: #ece2d4;
+    --ed-gutter-bg: #1f1b19;
+    --ed-gutter-text: #6b5e53;
+    --ed-active-line: rgba(255, 255, 255, 0.035);
+    --ed-selection: rgba(217, 154, 85, 0.32);
+    --ed-match: rgba(217, 154, 85, 0.20);
+    --ed-cursor: #ebb274;
+    --ed-command: #f0a46a;
+    --ed-keyword: #c4a7ff;
+    --ed-argument: #5eead4;
+    --ed-bracket: #a69685;
+    --ed-comment: #7f7165;
+    --ed-math: #93c5fd;
+    --ed-number: #fbbf24;
+    --ed-error: #fb923c;
+
+    color-scheme: dark;
+}
+
+html,
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+::selection {
+    background: var(--accent-soft);
+}
+
+/* Barras de rolagem discretas nos dois temas */
+* {
+    scrollbar-color: var(--border) transparent;
+}

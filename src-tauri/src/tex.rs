@@ -16,6 +16,7 @@ use crate::AppState;
 const EXE: &str = if cfg!(windows) { ".exe" } else { "" };
 const TINYTEX_DIR: &str = "TinyTeX";
 const TINYTEX_ZIP: &str = "resources/tinytex.zip";
+const VERSION_FILE: &str = ".caramelotex-version";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -82,15 +83,33 @@ fn find_in_path() -> Option<TexInstall> {
 
 /// Extrai o TinyTeX embutido, se ele vier no instalador e ainda não tiver sido extraído.
 /// Extrai para uma pasta temporária e renomeia no fim, para nunca deixar uma instalação pela metade.
+/// Versão gravada pelo scripts/build-tinytex.ps1 dentro do zip (ex.: "2026.10-r2").
+fn zip_version(zip_path: &Path) -> Option<String> {
+    let file = fs::File::open(zip_path).ok()?;
+    let mut archive = zip::ZipArchive::new(file).ok()?;
+    let mut entry = archive.by_name(&format!("{TINYTEX_DIR}/{VERSION_FILE}")).ok()?;
+    let mut version = String::new();
+    io::Read::read_to_string(&mut entry, &mut version).ok()?;
+    Some(version.trim().to_string())
+}
+
+fn installed_version(target: &Path) -> Option<String> {
+    fs::read_to_string(target.join(VERSION_FILE)).ok().map(|v| v.trim().to_string())
+}
+
 fn extract_bundled(app: &AppHandle) -> Result<bool, String> {
     let Some(target) = bundled_root(app) else { return Ok(false) };
-    if target.exists() {
-        return Ok(false);
-    }
     let zip_path = match app.path().resolve(TINYTEX_ZIP, tauri::path::BaseDirectory::Resource) {
         Ok(p) if p.is_file() => p,
         _ => return Ok(false),
     };
+    // Reextrai quando o instalador traz uma versão diferente da instalada
+    // (ex.: atualização do app com pacotes novos). Zips sem versão (v0.1) só
+    // são extraídos na primeira vez.
+    let wanted = zip_version(&zip_path);
+    if target.exists() && (wanted.is_none() || installed_version(&target) == wanted) {
+        return Ok(false);
+    }
 
     let parent = target.parent().ok_or("Pasta de dados inválida")?;
     let partial = parent.join(format!("{TINYTEX_DIR}.partial"));
@@ -123,8 +142,16 @@ fn extract_bundled(app: &AppHandle) -> Result<bool, String> {
     // O zip tem a pasta TinyTeX/ no topo.
     let extracted = partial.join(TINYTEX_DIR);
     let source = if extracted.is_dir() { extracted } else { partial.clone() };
+
+    // Atualização: tira a versão antiga do caminho antes de pôr a nova
+    let old = parent.join(format!("{TINYTEX_DIR}.old"));
+    if target.exists() {
+        let _ = fs::remove_dir_all(&old);
+        fs::rename(&target, &old).map_err(|e| format!("Erro ao atualizar o TinyTeX (feche outros programas que usem o LaTeX): {e}"))?;
+    }
     fs::rename(&source, &target).map_err(|e| format!("Erro ao instalar o TinyTeX: {e}"))?;
     let _ = fs::remove_dir_all(&partial);
+    let _ = fs::remove_dir_all(&old);
     Ok(true)
 }
 
@@ -223,6 +250,46 @@ pub async fn install_missing_file(
             Ok(package)
         } else {
             Err(format!("Falha ao instalar {package}:\n{output}"))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Contagem detalhada de palavras com o texcount (segue \input/\include).
+/// Devolve a saída do texcount com totais e subcontagens por seção (`-merge -sub=section`).
+#[tauri::command]
+pub async fn word_count(app: AppHandle, state: State<'_, AppState>, main_file: String) -> Result<String, String> {
+    let root = crate::fs_commands::current_root(&state)?;
+    let main = crate::paths::resolve_in_root(&root, &main_file)?;
+    let install = current_install(&app, &state).ok_or("Nenhuma distribuição LaTeX encontrada")?;
+    if !install.has_tool("texcount") {
+        return Err("A contagem detalhada usa o texcount, que não está instalado nesta distribuição LaTeX.".into());
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = main.parent().unwrap_or(&root).to_path_buf();
+        let name = main.file_name().ok_or("Arquivo principal inválido")?.to_string_lossy().into_owned();
+        let mut paths = vec![install.bin_dir.clone()];
+        if let Some(existing) = std::env::var_os("PATH") {
+            paths.extend(std::env::split_paths(&existing));
+        }
+        let mut cmd = std::process::Command::new(install.tool("texcount"));
+        cmd.args(["-inc", "-merge", "-utf8", "-sum", "-sub=section", "-nc", &name])
+            .current_dir(&dir)
+            .env("PATH", std::env::join_paths(paths).map_err(|e| e.to_string())?)
+            .stdin(std::process::Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        }
+        let out = cmd.output().map_err(|e| format!("Não foi possível executar o texcount: {e}"))?;
+        let text = String::from_utf8_lossy(&out.stdout).into_owned();
+        if out.status.success() {
+            Ok(text)
+        } else {
+            Err(format!("O texcount falhou:\n{text}{}", String::from_utf8_lossy(&out.stderr)))
         }
     })
     .await

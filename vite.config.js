@@ -13,6 +13,18 @@ export default defineConfig({
         port: 1420,
         strictPort: true,
     },
+    // Pré-empacota as dependências na inicialização do servidor de dev, para
+    // não reotimizar (e invalidar módulos já carregados) com o app aberto.
+    optimizeDeps: {
+        include: [
+            '@codemirror/state', '@codemirror/view', '@codemirror/commands', '@codemirror/search',
+            '@codemirror/autocomplete', '@codemirror/lint', '@codemirror/language',
+            '@codemirror/legacy-modes/mode/stex', '@lezer/highlight',
+            'pdfjs-dist', 'pako', 'jszip',
+            '@tauri-apps/api/core', '@tauri-apps/api/event', '@tauri-apps/plugin-dialog',
+            '@tauri-apps/plugin-store', '@tauri-apps/plugin-opener',
+        ],
+    },
     build: {
         outDir: resolve(import.meta.dirname, 'dist'),
         emptyOutDir: true,

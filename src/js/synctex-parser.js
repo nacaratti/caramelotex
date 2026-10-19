@@ -422,6 +422,5 @@ const SyncTexParser = (function() {
 })();
 
 // Exporta para uso global
-if (typeof window !== 'undefined') {
-    window.SyncTexParser = SyncTexParser;
-}
+export { SyncTexParser };
+export default SyncTexParser;

@@ -1,199 +1,95 @@
-# LaTeX Editor Online - MVP
+# CarameloTeX
 
-Editor LaTeX com interface web moderna e compilação server-side usando latex-on-http via Docker.
+Editor LaTeX para Windows que funciona **offline**: já vem com o LaTeX
+(TinyTeX), abre as pastas do seu computador como projetos e gera o PDF
+localmente.
 
-## Características
+**Baixar:** [CarameloTeX-setup-x64.exe](https://github.com/nacaratti/caramelotex/releases/latest/download/CarameloTeX-setup-x64.exe)
+(Windows 10 e 11, 64 bits) · [Página de versões](https://github.com/nacaratti/caramelotex/releases)
 
-- **Editor de código** com syntax highlighting para LaTeX (CodeMirror 5)
-- **Compilação server-side** usando latex-on-http (Docker local)
-- **Visualização de PDF** integrada (PDF.js)
-- **Auto-compilação** opcional
-- **Download de PDFs** gerados
-- **Interface moderna** com Tailwind CSS
-- **Funciona offline** após iniciar o Docker
+## Funcionalidades
 
-## Estrutura do Projeto
+- **Offline:** o LaTeX vem no instalador e é preparado na primeira execução.
+- **Seus arquivos, suas pastas:** sem conta nem nuvem; o editor salva direto
+  na pasta. Arquivos excluídos vão para a Lixeira. Se um arquivo muda fora do
+  app (Git, outro editor), ele é recarregado ou o app pergunta qual versão manter.
+- **Editor moderno (CodeMirror 6):** autocompletar de comandos, ambientes,
+  `\ref`, `\cite` (lendo os `.bib`) e arquivos; buscar e substituir; erros
+  sublinhados no código.
+- **Barra de formatação:** negrito, itálico, títulos, listas, equações, citação,
+  referência e nota de rodapé (Ctrl+B, Ctrl+I).
+- **Inserir figura e tabela:** diálogos que geram o código, com legenda e
+  rótulo; cole uma imagem (Ctrl+V) ou células do Excel/Google Planilhas. Os
+  pacotes necessários são adicionados ao preâmbulo.
+- **Compilação:** pdfLaTeX, XeLaTeX ou LuaLaTeX com latexmk (BibTeX e biber
+  automáticos). Pacote faltando? O app oferece instalar.
+- **PDF rápido:** só as páginas visíveis são desenhadas, a posição de leitura é
+  mantida ao recompilar, zoom e ajuste à largura.
+- **SyncTeX:** duplo clique no código mostra o trecho no PDF; Ctrl+clique no
+  PDF leva à linha.
+- **Sumário e contagem de palavras:** seções, figuras e tabelas de todos os
+  arquivos; contagem por seção com o texcount.
+- **Corretor ortográfico pt-BR** offline (dicionário VERO), com sugestões e
+  dicionário pessoal.
+- **Tema claro e escuro**, seguindo o Windows por padrão.
+- **11 modelos:** artigo ABNT, IEEE, TCC, dissertação/tese, Beamer, currículo e outros.
+
+## Desenvolvimento
+
+O app é feito com [Tauri 2](https://tauri.app) (Rust) e um frontend em
+JavaScript empacotado pelo Vite.
 
 ```
-latex-pdf-mvp/
-├── index.html          # Página principal
-├── docker-compose.yml  # Configuração do servidor LaTeX
-├── styles/
-│   └── main.css       # Estilos customizados
-└── js/
-    └── app.js         # Aplicação completa (Editor + Viewer + API Client)
+src/                 frontend (index.html = editor, projects.html, templates.html)
+  js/                módulos: app, editor (CodeMirror 6), pdf-viewer, toolbar,
+                     dialogs, completions, outline, spell, storage, theme
+  styles/            theme.css (tokens claro/escuro) e main.css (componentes)
+  templates/         modelos de projeto (JSON)
+src-tauri/           backend Rust
+  src/               fs_commands (arquivos), compile (latexmk), tex (TinyTeX),
+                     spell (corretor), paths (segurança de caminhos)
+  resources/         tinytex.zip (gerado) e dict/ (dicionário pt-BR)
+scripts/             build-tinytex.ps1
+site/                landing page (publicada no Vercel)
+tests/fixtures/      documentos usados nos testes de compilação
 ```
 
-## Pré-requisitos
+### Pré-requisitos
 
-- **Docker** e **Docker Compose** instalados ([Guia de instalação](https://docs.docker.com/get-docker/))
-- Navegador moderno (Chrome, Firefox, Edge, Safari)
+- Node.js LTS
+- Rust (`rustup`) e Visual Studio Build Tools com "Desenvolvimento para desktop com C++"
 
-## Como Executar
-
-### Passo 1: Iniciar o Servidor LaTeX (Docker)
-
-Na raiz do projeto, execute:
+### Comandos
 
 ```bash
-docker-compose up -d
+npm install
+# Gera src-tauri/resources/tinytex.zip (precisa de internet; ~25 min na 1ª vez)
+powershell -ExecutionPolicy Bypass -File scripts/build-tinytex.ps1
+npm run tauri dev     # app em modo de desenvolvimento
+npm run tauri build   # instalador em target/release/bundle/nsis/
 ```
 
-Isso vai:
-- Baixar a imagem `yoant/latexonhttp-python` (~500MB na primeira vez)
-- Iniciar o servidor LaTeX na porta 2345
-- Aguarde alguns segundos até o container estar pronto
+Ao mudar a lista de pacotes do TinyTeX, aumente `$BundleRevision` no script:
+o app compara a versão e atualiza o LaTeX de quem já tem uma versão anterior.
 
-Verifique se está rodando:
-```bash
-docker-compose ps
-```
-
-### Passo 2: Iniciar o Frontend
-
-Escolha uma das opções abaixo:
-
-#### Opção A: Servidor Local Simples
+### Testes
 
 ```bash
-# Usando Python 3
-python -m http.server 8000
-
-# Usando Node.js (http-server)
-npx http-server -p 8000
-
-# Usando PHP
-php -S localhost:8000
+cargo test --manifest-path src-tauri/Cargo.toml
+# Compilação real (modelos, bibliografia, XeLaTeX, erros, timeout):
+CARAMELOTEX_TEX_BIN=".../TinyTeX/bin/windows" cargo test --manifest-path src-tauri/Cargo.toml -- --ignored
 ```
 
-Depois acesse: `http://localhost:8000`
+### Publicar uma versão
 
-#### Opção B: Live Server (VS Code)
+1. Atualize a versão em `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`.
+2. `npm run tauri build`.
+3. Crie a release no GitHub anexando o instalador com o nome fixo
+   **`CarameloTeX-setup-x64.exe`** (a landing page aponta para
+   `releases/latest/download/CarameloTeX-setup-x64.exe`).
 
-1. Instale a extensão "Live Server" no VS Code
-2. Clique com botão direito em `index.html`
-3. Selecione "Open with Live Server"
+## Licenças de terceiros
 
-### Parar o Servidor LaTeX
-
-Quando terminar de usar:
-```bash
-docker-compose down
-```
-
-## Uso
-
-1. **Certifique-se** de que o Docker está rodando (`docker-compose ps`)
-2. **Escrever código LaTeX** no painel esquerdo
-3. **Clicar em "Compilar"** ou usar `Ctrl+S` / `Cmd+S`
-4. **Aguardar a compilação** (primeira compilação pode demorar ~10s)
-5. **Visualizar o PDF** no painel direito
-6. **Ativar "Auto"** para compilação automática ao digitar
-7. **Download** do PDF usando o botão de download
-
-## Atalhos de Teclado
-
-- `Ctrl+S` / `Cmd+S` - Compilar documento
-
-## Notas Importantes
-
-- A **primeira compilação** pode demorar ~10s enquanto o TeXLive inicializa
-- Após a primeira compilação, as compilações subsequentes são mais rápidas
-- O aplicativo funciona **offline** após o Docker estar rodando
-- Requer navegador moderno (Chrome, Firefox, Edge, Safari)
-- O servidor Docker usa ~500MB de espaço em disco
-
-## Dependências
-
-**Frontend (CDN):**
-- **Tailwind CSS** - Framework CSS
-- **CodeMirror 5** - Editor de código
-- **PDF.js** - Renderização de PDF
-
-**Backend (Docker):**
-- **latex-on-http** - API de compilação LaTeX
-- **TeXLive** - Distribuição LaTeX completa
-
-## Limitações do MVP
-
-- Requer Docker instalado e rodando
-- Primeira compilação pode demorar ~10s
-- Suporte a pacotes LaTeX padrão incluídos no TeXLive
-- Não suporta upload de imagens personalizadas (ainda)
-- Sem sistema de salvamento/persistência local
-- Compilação requer conexão com servidor local (Docker)
-
-## Troubleshooting
-
-### Erro: "Servidor LaTeX offline"
-
-Se você ver este erro ao compilar:
-
-1. Verifique se o Docker está rodando:
-   ```bash
-   docker-compose ps
-   ```
-
-2. Se não estiver rodando, inicie:
-   ```bash
-   docker-compose up -d
-   ```
-
-3. Aguarde alguns segundos e tente compilar novamente
-
-### Docker não inicia
-
-- Verifique se o Docker Desktop está rodando
-- Verifique se a porta 2345 não está sendo usada:
-  ```bash
-  # Windows
-  netstat -ano | findstr :2345
-
-  # Linux/Mac
-  lsof -i :2345
-  ```
-
-### Compilação muito lenta
-
-- A primeira compilação é mais lenta (~10s)
-- Compilações subsequentes são mais rápidas (~2-3s)
-- Se continuar lento, reinicie o container:
-  ```bash
-  docker-compose restart
-  ```
-
-### Ver logs do servidor LaTeX
-
-```bash
-docker-compose logs -f latex-compiler
-```
-
-## Próximos Passos
-
-- [ ] Sistema de templates predefinidos
-- [ ] Upload de imagens e recursos
-- [ ] Salvamento local (LocalStorage)
-- [ ] Mais pacotes LaTeX
-- [ ] Modo colaborativo
-
-## Tecnologias Utilizadas
-
-**Frontend:**
-- HTML5
-- CSS3 (Tailwind CSS)
-- JavaScript (Vanilla JS)
-- CodeMirror 5
-- PDF.js
-
-**Backend:**
-- Docker & Docker Compose
-- latex-on-http (API Python)
-- TeXLive (pdflatex)
-
-## Licença
-
-MIT
-
-## Autor
-
-Desenvolvido com Claude AI
+TinyTeX/TeX Live (licenças livres dos respectivos pacotes), dicionário VERO
+pt-BR (LGPLv3/MPL), fontes IBM Plex Sans e JetBrains Mono (OFL), Latin Modern
+(GUST Font License).

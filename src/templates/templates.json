@@ -1,13 +1,13 @@
 [
   {
     "id": "artigo-basico",
-    "name": "Artigo Basico",
-    "description": "Template simples para artigos academicos com estrutura padrao.",
+    "name": "Artigo Básico",
+    "description": "Modelo simples para artigos acadêmicos com estrutura padrão.",
     "category": "academic",
     "tags": [
       "artigo",
-      "basico",
-      "academico"
+      "básico",
+      "acadêmico"
     ],
     "icon": "document",
     "files": {
@@ -17,11 +17,11 @@
   {
     "id": "ieee-conference",
     "name": "IEEE Conference",
-    "description": "Template no formato IEEE para conferencias internacionais.",
+    "description": "Modelo no formato IEEE para conferências internacionais.",
     "category": "academic",
     "tags": [
       "ieee",
-      "conferencia",
+      "conferência",
       "internacional"
     ],
     "icon": "academic",
@@ -32,12 +32,12 @@
   {
     "id": "artigo-abnt",
     "name": "Artigo ABNT",
-    "description": "Artigo seguindo as normas da ABNT para trabalhos academicos no Brasil.",
+    "description": "Artigo seguindo as normas da ABNT para trabalhos acadêmicos no Brasil.",
     "category": "academic",
     "tags": [
       "abnt",
       "brasil",
-      "academico"
+      "acadêmico"
     ],
     "icon": "document",
     "files": {
@@ -46,12 +46,12 @@
   },
   {
     "id": "dissertacao-tese",
-    "name": "Dissertacao/Tese",
-    "description": "Estrutura completa para dissertacoes de mestrado e teses de doutorado.",
+    "name": "Dissertação/Tese",
+    "description": "Estrutura completa para dissertações de mestrado e teses de doutorado.",
     "category": "thesis",
     "tags": [
       "tese",
-      "dissertacao",
+      "dissertação",
       "mestrado",
       "doutorado"
     ],
@@ -62,12 +62,12 @@
   },
   {
     "id": "tcc-trabalho-de-conclusao",
-    "name": "TCC - Trabalho de Conclusao",
-    "description": "Template para Trabalhos de Conclusao de Curso de graduacao.",
+    "name": "TCC - Trabalho de Conclusão",
+    "description": "Modelo para Trabalhos de Conclusão de Curso de graduação.",
     "category": "thesis",
     "tags": [
       "tcc",
-      "graduacao",
+      "graduação",
       "monografia"
     ],
     "icon": "book",
@@ -77,13 +77,13 @@
   },
   {
     "id": "apresentacao-beamer",
-    "name": "Apresentacao Beamer",
-    "description": "Template basico para apresentacoes com Beamer.",
+    "name": "Apresentação Beamer",
+    "description": "Modelo básico para apresentações com Beamer.",
     "category": "presentation",
     "tags": [
       "beamer",
       "slides",
-      "apresentacao"
+      "apresentação"
     ],
     "icon": "presentation",
     "files": {
@@ -93,7 +93,7 @@
   {
     "id": "beamer-moderno-metropolis",
     "name": "Beamer Moderno (Metropolis)",
-    "description": "Apresentacao com tema moderno e minimalista Metropolis.",
+    "description": "Apresentação com tema moderno e minimalista Metropolis.",
     "category": "presentation",
     "tags": [
       "beamer",
@@ -107,11 +107,11 @@
   },
   {
     "id": "curriculo-moderno",
-    "name": "Curriculo Moderno",
-    "description": "Template de curriculo profissional com design moderno.",
+    "name": "Currículo Moderno",
+    "description": "Modelo de currículo profissional com design moderno.",
     "category": "professional",
     "tags": [
-      "curriculo",
+      "currículo",
       "cv",
       "profissional"
     ],
@@ -122,12 +122,12 @@
   },
   {
     "id": "carta-de-apresentacao",
-    "name": "Carta de Apresentacao",
-    "description": "Modelo de carta de apresentacao para candidatura a vagas.",
+    "name": "Carta de Apresentação",
+    "description": "Modelo de carta de apresentação para candidatura a vagas.",
     "category": "professional",
     "tags": [
       "carta",
-      "apresentacao",
+      "apresentação",
       "emprego"
     ],
     "icon": "mail",
@@ -137,13 +137,13 @@
   },
   {
     "id": "relatorio-tecnico",
-    "name": "Relatorio Tecnico",
-    "description": "Template para relatorios tecnicos e documentacao.",
+    "name": "Relatório Técnico",
+    "description": "Modelo para relatórios técnicos e documentação.",
     "category": "professional",
     "tags": [
-      "relatorio",
-      "tecnico",
-      "documentacao"
+      "relatório",
+      "técnico",
+      "documentação"
     ],
     "icon": "document",
     "files": {
@@ -153,7 +153,7 @@
   {
     "id": "fatura-invoice",
     "name": "Fatura / Invoice",
-    "description": "Template para faturas e notas de servico.",
+    "description": "Modelo para faturas e notas de serviço.",
     "category": "professional",
     "tags": [
       "fatura",

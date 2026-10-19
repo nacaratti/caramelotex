@@ -1,6 +1,7 @@
 mod compile;
 mod fs_commands;
 mod paths;
+mod spell;
 mod tex;
 
 use std::path::PathBuf;
@@ -38,8 +39,13 @@ pub fn run() {
             fs_commands::export_pdf,
             tex::prepare_tex,
             tex::install_missing_file,
+            tex::word_count,
+            spell::spell_check,
+            spell::spell_suggest,
+            spell::spell_add,
             compile::compile_project,
             compile::cancel_compile,
+            compile::read_build_file,
         ])
         .run(tauri::generate_context!())
         .expect("erro ao iniciar o CarameloTeX");

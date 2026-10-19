@@ -1,22 +1,22 @@
 /**
- * app.js - Aplicação LaTeX Editor (SEM ES6 Modules)
+ * app.js - Editor do CarameloTeX (página index.html)
  */
+import './theme.js';
+import pako from 'pako';
+import { StorageService } from './storage.js';
+import { SyncTexParser } from './synctex-parser.js';
+import { createEditor } from './editor.js';
+import { createPdfViewer } from './pdf-viewer.js';
+import { createToolbar } from './toolbar.js';
+import { openFigureDialog, openTableDialog, openWordCountDialog, parseTexcount } from './dialogs.js';
+import { createCompletionSources } from './completions.js';
+import { buildOutline, countWords } from './outline.js';
+import { spellChecker, spellTheme } from './spell.js';
+import { escapeHtml, showToast } from './ui.js';
+import { cycleTheme, themeLabel } from './theme.js';
 
-// ========== UTILIDADES ==========
-function escapeHtml(str) {
-    if (typeof str !== 'string') return '';
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
-
-// Variáveis globais
+// Estado do editor
 let editor;
-let compiler;
-let viewer;
 let currentPdfData = null;
 let currentSynctexData = null; // Dados SyncTeX parseados para sincronização
 let autoCompileEnabled = false;
@@ -80,11 +80,11 @@ function updateSaveStatus(status) {
     switch (status) {
         case 'saving':
             el.textContent = 'Salvando...';
-            el.className = 'text-yellow-400';
+            el.className = 'status-saving';
             break;
         case 'saved':
             el.textContent = 'Salvo';
-            el.className = 'text-green-400';
+            el.className = 'status-saved';
             _saveStatusTimer = setTimeout(() => {
                 el.textContent = 'Pronto';
                 el.className = '';
@@ -92,7 +92,7 @@ function updateSaveStatus(status) {
             break;
         case 'error':
             el.textContent = 'Erro ao salvar';
-            el.className = 'text-red-400';
+            el.className = 'status-error';
             _saveStatusTimer = setTimeout(() => {
                 el.textContent = 'Pronto';
                 el.className = '';
@@ -131,6 +131,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (overlay) overlay.classList.add('hidden');
 
     setupEventListeners();
+    initWritingTools();
+    initSpellcheck();
+    window.addEventListener('focus', checkExternalChanges);
 
     // Rede de segurança: grava o que estiver pendente a cada 30s
     setInterval(() => {
@@ -173,8 +176,9 @@ function initResizer() {
 
         // Calculate new width percentage
         // Offset by sidebar width if visible
-        const sidebarWidth = document.getElementById('filesPanel').classList.contains('hidden') ? 0 : 256; // 64 * 4 = 256px (w-64)
-        const containerWidth = container.offsetWidth;
+        const filesPanel = document.getElementById('filesPanel');
+        const sidebarWidth = filesPanel.classList.contains('hidden') ? 0 : filesPanel.offsetWidth;
+        const containerWidth = container.offsetWidth - sidebarWidth;
         const x = e.clientX - sidebarWidth;
 
         // Constraints (min 10% max 90%)
@@ -188,17 +192,12 @@ function initResizer() {
         viewerPanel.style.width = `${newViewerWidthPercent}%`;
 
         // Refresh editor layout
-        /* // CodeMirror might need refresh if layout changes drastically, but flex handles it well mostly.
-           // However, calling editor.refresh() prevents cursor displacement issues.
-           if (editor) editor.refresh();
-        */
     });
 
     document.addEventListener('mouseup', () => {
         if (isResizing) {
             isResizing = false;
             document.body.classList.remove('cursor-col-resize', 'select-none');
-            if (editor) editor.refresh(); // Refresh CodeMirror to adjust to new size
         }
     });
 }
@@ -235,7 +234,12 @@ async function saveCurrentProject() {
         const file = projectFiles[path];
         if (!isTextFile(file)) continue;
         try {
-            await StorageService.writeText(path, file.content);
+            try {
+                file.modified = await StorageService.writeText(path, file.content, file.modified);
+            } catch (e) {
+                if (!String(e).startsWith('CONFLITO:')) throw e;
+                await resolveConflict(path);
+            }
         } catch (e) {
             console.error(`Erro ao salvar ${path}:`, e);
             failed.push(path);
@@ -250,53 +254,38 @@ async function saveCurrentProject() {
 
 // ========== EDITOR ==========
 function initEditor() {
-    const editorElement = document.getElementById('editor');
+    editor = createEditor(document.getElementById('editor'), {
+        onChange() {
+            updateLineCount();
+            scheduleStats();
 
-    editor = CodeMirror(editorElement, {
-        value: '', // Será preenchido após carregar o template
-        mode: 'stex',
-        theme: 'dracula',
-        lineNumbers: true,
-        lineWrapping: true,
-        autofocus: true,
-        indentUnit: 4,
-        tabSize: 4,
-        indentWithTabs: false,
-        styleActiveLine: true,
-        matchBrackets: true,
-    });
-
-    // Listener para mudanças no editor
-    editor.on('change', function () {
-        updateLineCount();
-
-        // Debounce para auto-compile e auto-save
-        if (autoCompileEnabled) {
+            // Debounce para auto-compile e auto-save
             clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-                compile(); // compile() grava os arquivos antes
-            }, 1000);
-        } else {
-            // Manual save debounce
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-                saveCurrentProject();
-            }, 2000);
-        }
-    });
-
-    // Forward sync: duplo clique no editor -> vai para posição no PDF
-    editor.on('dblclick', function (cm) {
-        if (!currentSynctexData) return;
-
-        setTimeout(() => {
-            const cursor = cm.getCursor();
-            forwardSyncToPdf(cursor.line + 1); // SyncTeX usa 1-indexed
-        }, 50);
+            if (autoCompileEnabled) {
+                debounceTimer = setTimeout(() => compile(), 1000); // compile() grava antes
+            } else {
+                debounceTimer = setTimeout(() => saveCurrentProject(), 2000);
+            }
+        },
+        // Forward sync: duplo clique no código -> posição no PDF
+        onDoubleClick(line) {
+            if (currentSynctexData) forwardSyncToPdf(line);
+        },
+        onPasteImage: (file) => pasteImage(file),
+        keys: [
+            { key: 'Mod-b', run: () => { formatting.bold(); return true; } },
+            { key: 'Mod-i', run: () => { formatting.italic(); return true; } },
+        ],
     });
 
     updateLineCount();
-    console.log('✅ Editor inicializado');
+}
+
+/** Mostra um arquivo de texto no editor. */
+function showInEditor(path) {
+    const file = path ? projectFiles[path] : null;
+    editor.setDoc(path, file && isTextFile(file) ? file.content : '');
+    updateLineCount();
 }
 
 function updateLineCount() {
@@ -315,10 +304,6 @@ function getEditorContent() {
 // Compila localmente pelo backend (latexmk + TinyTeX/TeX do sistema), lendo os arquivos do disco.
 let isCompiling = false;
 let compileRequestId = 0;
-
-function base64ToBytes(base64) {
-    return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-}
 
 /** Arquivo .sty/.cls faltando no log ("LaTeX Error: File `x.sty' not found"), ou null. */
 function findMissingFile(log) {
@@ -374,18 +359,25 @@ async function compile() {
 
         console.log(`Compilação: ok=${result.ok} em ${result.durationMs}ms (${result.texSource})`);
 
-        if (result.pdf) {
-            currentPdfData = base64ToBytes(result.pdf);
+        if (result.pdfFile) {
+            const [pdfBytes, synctexBytes] = await Promise.all([
+                StorageService.readBuildFile(result.pdfFile),
+                result.synctexFile ? StorageService.readBuildFile(result.synctexFile).catch(() => null) : null,
+            ]);
+            if (requestId !== compileRequestId) return;
+
+            currentPdfData = pdfBytes;
             currentSynctexData = null;
-            if (result.synctex && typeof pako !== 'undefined' && typeof SyncTexParser !== 'undefined') {
+            if (synctexBytes) {
                 try {
-                    const synctexText = pako.inflate(base64ToBytes(result.synctex), { to: 'string' });
-                    currentSynctexData = SyncTexParser.parse(synctexText, projectRoot);
+                    currentSynctexData = SyncTexParser.parse(pako.inflate(synctexBytes, { to: 'string' }), projectRoot);
                 } catch (syncErr) {
                     console.warn('Erro ao ler SyncTeX:', syncErr);
                 }
             }
-            await loadPDF(currentPdfData.slice());
+            // O pdf.js transfere o buffer para o worker; passa uma cópia
+            await pdfViewer.load(currentPdfData.slice());
+            updateStats();
             document.getElementById('downloadBtn').disabled = false;
         }
 
@@ -399,11 +391,11 @@ async function compile() {
             compileStatus.textContent = `PDF gerado (${(result.durationMs / 1000).toFixed(1)}s)`;
             if (warnings.length > 0) {
                 showToast('PDF gerado com ' + warnings.length + ' aviso(s)', 'warning');
-                toggleBtn.classList.add('text-yellow-400');
-                toggleBtn.title = warnings.length + ' aviso(s) detectado(s)';
+                toggleBtn.dataset.status = 'warning';
+                toggleBtn.title = warnings.length + ' aviso(s) — ver detalhes';
             } else {
-                toggleBtn.classList.remove('text-yellow-400', 'text-red-400');
-                toggleBtn.title = 'Ver Logs';
+                delete toggleBtn.dataset.status;
+                toggleBtn.title = 'Ver erros e avisos';
             }
             switchViewerMode('pdf');
             return;
@@ -421,9 +413,8 @@ async function compile() {
         renderErrorLog(logEntries);
         highlightErrors(logEntries);
         switchViewerMode('logs');
-        toggleBtn.classList.add('text-red-400');
-        toggleBtn.classList.remove('text-yellow-400');
-        toggleBtn.title = 'Erros na compilação';
+        toggleBtn.dataset.status = 'error';
+        toggleBtn.title = 'Erros na compilação — ver detalhes';
         showToast('Erro na compilação', 'error');
 
         const missing = findMissingFile(result.log);
@@ -658,127 +649,85 @@ function renderErrorLog(entries) {
     const logsContent = document.getElementById('logsContent');
     logsContent.innerHTML = '';
 
-    // Header
-    if (entries.length > 0) {
-        const errorCount = entries.filter(e => e.type === 'error').length;
-        const warningCount = entries.filter(e => e.type === 'warning').length;
-        const header = document.createElement('div');
-        header.className = 'mb-4 text-xs font-semibold uppercase tracking-wider text-gray-400';
-        header.textContent = `${errorCount} Erros, ${warningCount} Avisos`;
-        logsContent.appendChild(header);
+    if (entries.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'text-muted text-center mt-10';
+        empty.textContent = 'Nenhum erro ou aviso.';
+        logsContent.appendChild(empty);
+        return;
     }
 
-    const listContainer = document.createElement('div');
-    listContainer.className = 'space-y-3';
+    const errorCount = entries.filter(e => e.type === 'error').length;
+    const warningCount = entries.length - errorCount;
+    const summary = document.createElement('p');
+    summary.className = 'log-summary';
+    summary.textContent = `${errorCount} ${errorCount === 1 ? 'erro' : 'erros'}, ${warningCount} ${warningCount === 1 ? 'aviso' : 'avisos'}`;
+    logsContent.appendChild(summary);
 
     entries.forEach((entry) => {
-        const iconInfo = entry.type === 'error'
-            ? { color: 'text-red-400', border: 'border-red-900', label: 'Erro' }
-            : { color: 'text-yellow-400', border: 'border-yellow-900', label: 'Aviso' };
-
-        const clickableClass = entry.line ? 'cursor-pointer hover:bg-gray-800' : '';
-
-        const card = document.createElement('div');
-        card.className = `flex items-start p-3 rounded bg-gray-800 border-l-4 ${iconInfo.border} ${clickableClass}`;
-
+        const isError = entry.type === 'error';
+        // Com linha conhecida o cartão é um botão que leva até ela
+        const card = document.createElement(entry.line ? 'button' : 'div');
+        card.className = `log-card${isError ? ' is-error' : ''}`;
         if (entry.line) {
+            card.type = 'button';
             card.addEventListener('click', () => goToLine(entry.line, entry.file));
         }
 
-        const inner = document.createElement('div');
-        inner.className = 'flex-1';
-
-        const topRow = document.createElement('div');
-        topRow.className = 'flex justify-between items-center mb-1';
-
-        const labelSpan = document.createElement('span');
-        labelSpan.className = `text-xs font-bold ${iconInfo.color} uppercase`;
-        labelSpan.textContent = iconInfo.label;
-        topRow.appendChild(labelSpan);
-
+        const top = document.createElement('div');
+        top.className = 'log-card-top';
+        const kind = document.createElement('span');
+        kind.className = 'log-card-kind';
+        kind.textContent = isError ? 'Erro' : 'Aviso';
+        top.appendChild(kind);
         if (entry.line) {
-            const lineSpan = document.createElement('span');
-            lineSpan.className = 'text-xs text-gray-500 font-mono';
-            lineSpan.textContent = entry.file ? `${entry.file}:${entry.line}` : `Linha ${entry.line}`;
-            topRow.appendChild(lineSpan);
+            const where = document.createElement('span');
+            where.className = 'log-card-where';
+            where.textContent = `${entry.file || mainFile}:${entry.line}`;
+            top.appendChild(where);
         }
 
-        const msgP = document.createElement('p');
-        msgP.className = 'text-sm text-gray-300 font-mono whitespace-pre-wrap leading-relaxed';
-        msgP.textContent = entry.message;
+        const message = document.createElement('p');
+        message.className = 'log-card-message';
+        message.textContent = entry.message;
 
-        const rawP = document.createElement('p');
-        rawP.className = 'text-xs text-gray-600 mt-2 font-mono truncate';
-        rawP.textContent = entry.raw || '';
-
-        inner.appendChild(topRow);
-        inner.appendChild(msgP);
-        inner.appendChild(rawP);
-        card.appendChild(inner);
-        listContainer.appendChild(card);
+        card.appendChild(top);
+        card.appendChild(message);
+        logsContent.appendChild(card);
     });
-
-    logsContent.appendChild(listContainer);
 }
+
+const LOGS_ICON = '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v4m0 4h.01"/><circle cx="12" cy="12" r="9"/></svg>';
+const PDF_ICON = '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h6"/></svg>';
 
 function switchViewerMode(mode) {
     const pdfContainer = document.getElementById('pdfViewerContainer');
     const logsContainer = document.getElementById('logsContainer');
     const toggleBtn = document.getElementById('toggleLogsBtn');
+    const showPdf = mode === 'pdf';
 
-    if (mode === 'pdf') {
-        pdfContainer.classList.remove('hidden');
-        logsContainer.classList.add('hidden');
-        // Update icon to "Bug" (to go to logs)
-        toggleBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
-        toggleBtn.title = "Ver Logs";
-        toggleBtn.classList.remove('text-red-400');
-    } else {
-        pdfContainer.classList.add('hidden');
-        logsContainer.classList.remove('hidden');
-        // Update icon to "Document" (to go to pdf)
-        toggleBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>';
-        toggleBtn.title = "Ver PDF";
-        toggleBtn.classList.add('text-red-400'); // Highlight active
-    }
+    pdfContainer.classList.toggle('hidden', !showPdf);
+    logsContainer.classList.toggle('hidden', showPdf);
+    // O botão mostra para onde vai: do PDF para os erros, ou de volta ao PDF
+    toggleBtn.innerHTML = showPdf ? LOGS_ICON : PDF_ICON;
+    toggleBtn.setAttribute('aria-pressed', String(!showPdf));
+    if (!showPdf) toggleBtn.title = 'Voltar ao PDF';
 }
 
-// Markers handles
-let errorMarkers = [];
 let lastLogEntries = []; // Reaplicados ao trocar de arquivo no editor
 
+/** Sublinha no código os erros e avisos que pertencem ao arquivo aberto. */
 function highlightErrors(entries) {
     if (!editor) return;
     lastLogEntries = entries;
-
-    // Limpa marcadores anteriores
-    errorMarkers.forEach(marker => marker.clear());
-    errorMarkers = [];
-    editor.clearGutter('CodeMirror-linenumbers'); // Se usarmos gutters customizados
-
-    entries.forEach(entry => {
+    editor.setDiagnostics(entries
         // Entradas sem arquivo identificado são do arquivo principal
-        if (entry.line && (entry.file || mainFile) === currentFile) {
-            // CodeMirror é 0-indexed
-            const lineIndex = entry.line - 1;
-
-            // Adiciona classe na linha (background color)
-            // Precisamos definir CSS para .line-error e .line-warning
-            const className = entry.type === 'error' ? 'line-error' : 'line-warning';
-            // editor.addLineClass(lineIndex, 'background', className);
-
-            // Adiciona widget abaixo da linha (opcional) ou gutter marker
-            // Vamos usar gutter marker se possível ou apenas TextMarker
-
-            // Simples: MarkText para sublinhado ou background
-            const marker = editor.markText(
-                { line: lineIndex, ch: 0 },
-                { line: lineIndex, ch: 1000 }, // Até o fim da linha
-                { className: className, title: entry.message }
-            );
-            errorMarkers.push(marker);
-        }
-    });
+        .filter(entry => entry.line && (entry.file || mainFile) === currentFile)
+        .map(entry => ({
+            line: entry.line,
+            severity: entry.type === 'error' ? 'error' : 'warning',
+            message: entry.message,
+        })));
 }
 
 function goToLine(line, file) {
@@ -787,76 +736,39 @@ function goToLine(line, file) {
     if (target && target !== currentFile && isTextFile(projectFiles[target])) {
         selectFile(target);
     }
-    const lineIndex = line - 1;
-    editor.setCursor(lineIndex, 0);
-    editor.focus();
-    // Centraliza
-    const coords = editor.charCoords({ line: lineIndex, ch: 0 }, "local");
-    editor.scrollTo(null, coords.top);
+    editor.goToLine(line);
 }
 
 // ========== PDF VIEWER ==========
+let pdfViewer = null;
+
 function initViewer() {
-    console.log('✅ Visualizador PDF inicializado');
-}
+    switchViewerMode('pdf');
+    pdfViewer = createPdfViewer({
+        container: document.getElementById('pdfViewerContainer'),
+        pagesEl: document.getElementById('pdfPagesContainer'),
+        placeholderEl: document.getElementById('pdfPlaceholder'),
+        onZoomChange({ scale, fitWidth }) {
+            document.getElementById('zoomLabel').textContent = `${Math.round(scale * 100)}%`;
+            document.getElementById('zoomFitBtn').setAttribute('aria-pressed', String(fitWidth));
+        },
+        onPageClick(event, point) {
+            // Ctrl+clique no PDF: vai para a linha do código (SyncTeX reverso)
+            if (event.ctrlKey) reverseSyncToEditor(point);
+        },
+    });
 
-let pdfDoc = null;
-let currentPage = 1;
-let scale = 1.5;
+    document.getElementById('zoomInBtn').addEventListener('click', () => pdfViewer.zoomIn());
+    document.getElementById('zoomOutBtn').addEventListener('click', () => pdfViewer.zoomOut());
+    document.getElementById('zoomFitBtn').addEventListener('click', () => pdfViewer.fitToWidth());
 
-async function loadPDF(pdfData) {
-    try {
-        const loadingTask = pdfjsLib.getDocument({ data: pdfData, isEvalSupported: false });
-        pdfDoc = await loadingTask.promise;
-
-        document.getElementById('pdfPlaceholder').classList.add('hidden');
-        const pagesContainer = document.getElementById('pdfPagesContainer');
-        pagesContainer.classList.remove('hidden');
-        pagesContainer.innerHTML = '';
-
-        for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
-            await renderPage(pageNum, pagesContainer);
-        }
-
-        // Configura reverse sync (Ctrl+click no PDF)
-        setupReverseSyncHandler();
-
-        showToast(`PDF carregado: ${pdfDoc.numPages} página(s)`, 'success');
-    } catch (error) {
-        console.error('❌ Erro ao carregar PDF:', error);
-        showToast('Erro ao carregar PDF', 'error');
-    }
-}
-
-async function renderPage(pageNum, container) {
-    try {
-        const page = await pdfDoc.getPage(pageNum);
-        const viewport = page.getViewport({ scale: scale });
-
-        const canvas = document.createElement('canvas');
-        canvas.className = 'mx-auto shadow-2xl rounded-lg';
-        canvas.dataset.pageNum = pageNum;
-        const context = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-
-        const pageWrapper = document.createElement('div');
-        pageWrapper.className = 'relative pdf-page-wrapper';
-        pageWrapper.dataset.pageNum = pageNum;
-
-        pageWrapper.appendChild(canvas);
-        container.appendChild(pageWrapper);
-
-        const renderContext = {
-            canvasContext: context,
-            viewport: viewport
-        };
-
-        await page.render(renderContext).promise;
-        currentPage = pageNum;
-    } catch (error) {
-        console.error(`❌ Erro ao renderizar página ${pageNum}:`, error);
-    }
+    // Cursor de mira com Ctrl pressionado sobre o PDF
+    const container = document.getElementById('pdfViewerContainer');
+    const updateCursor = (event) => {
+        container.style.cursor = event.ctrlKey && currentSynctexData ? 'crosshair' : '';
+    };
+    container.addEventListener('mousemove', updateCursor);
+    document.addEventListener('keyup', updateCursor);
 }
 
 // ========== SYNCTEX SYNC ==========
@@ -866,140 +778,434 @@ async function renderPage(pageNum, container) {
  * @param {number} lineNumber - Número da linha (1-indexed)
  */
 function forwardSyncToPdf(lineNumber) {
-    if (!currentSynctexData || !pdfDoc) {
-        console.log('SyncTeX não disponível');
-        return;
-    }
+    if (!currentSynctexData || !pdfViewer.numPages) return;
 
-    const fileName = currentFile || mainFile;
-    const blocks = SyncTexParser.forwardSync(currentSynctexData, fileName, lineNumber);
+    const blocks = SyncTexParser.forwardSync(currentSynctexData, currentFile || mainFile, lineNumber);
+    if (!blocks || blocks.length === 0) return;
 
-    if (!blocks || blocks.length === 0) {
-        return;
-    }
-
-    // Usa o primeiro bloco encontrado
     const block = blocks[0];
     const pageNum = block.page || 1;
+    const coords = SyncTexParser.synctexToCanvas(currentSynctexData, block, 0, pdfViewer.scale);
 
-    // Encontra o canvas da página
-    const pagesContainer = document.getElementById('pdfPagesContainer');
-    const pageWrapper = pagesContainer.querySelector(`[data-page-num="${pageNum}"]`);
-
-    if (!pageWrapper) {
-        console.log(`Página ${pageNum} não encontrada`);
-        return;
-    }
-
-    const canvas = pageWrapper.querySelector('canvas');
-    if (!canvas) return;
-
-    // Converte coordenadas SyncTeX para canvas
-    const coords = SyncTexParser.synctexToCanvas(currentSynctexData, block, canvas.height, scale);
-
-    // Scroll para a posição
-    const container = document.getElementById('pdfViewerContainer');
-    const scrollY = pageWrapper.offsetTop + coords.y - container.clientHeight / 3;
-
-    container.scrollTo({
-        top: Math.max(0, scrollY),
-        behavior: 'smooth'
-    });
-
-    // Garante que estamos vendo o PDF
     switchViewerMode('pdf');
+    pdfViewer.scrollTo(pageNum, coords.y);
+    pdfViewer.flash(pageNum, coords.y);
 }
 
 /**
- * Reverse sync: vai da posição no PDF para a linha correspondente no editor
- * @param {number} pageNum - Número da página
- * @param {number} canvasX - Coordenada X no canvas
- * @param {number} canvasY - Coordenada Y no canvas
- * @param {HTMLCanvasElement} canvas - Elemento canvas
+ * Reverse sync: vai da posição clicada no PDF para a linha correspondente no editor
+ * @param {{pageNum: number, x: number, y: number, height: number, scale: number}} point - em pixels CSS
  */
-function reverseSyncToEditor(pageNum, canvasX, canvasY, canvas) {
+function reverseSyncToEditor(point) {
     if (!currentSynctexData) {
-        showToast('SyncTeX não disponível', 'warning');
+        showToast('Compile o documento para usar a sincronização', 'warning');
         return;
     }
 
-    // Converte coordenadas do canvas para SyncTeX
-    const synctexCoords = SyncTexParser.canvasToSynctex(
-        currentSynctexData,
-        canvasX,
-        canvasY,
-        canvas.height,
-        scale
-    );
-
-    // Busca a linha correspondente
-    const result = SyncTexParser.reverseSync(
-        currentSynctexData,
-        pageNum,
-        synctexCoords.x,
-        synctexCoords.y
-    );
-
+    const synctexCoords = SyncTexParser.canvasToSynctex(currentSynctexData, point.x, point.y, point.height, point.scale);
+    const result = SyncTexParser.reverseSync(currentSynctexData, point.pageNum, synctexCoords.x, synctexCoords.y);
     if (!result) {
-        showToast('Posição não mapeada', 'info');
+        showToast('Posição não encontrada no código', 'info');
         return;
     }
 
     // Vai para a linha no editor (trocando de arquivo se for outro do projeto)
     goToLine(result.line, projectFiles[result.file] ? result.file : currentFile);
+}
 
-    console.log(`🔗 Reverse sync: página ${pageNum} (${Math.round(canvasX)}, ${Math.round(canvasY)}) → ${result.file}:${result.line}`);
+// ========== FERRAMENTAS DE ESCRITA ==========
+// Barra de formatação, diálogos de figura e tabela, colar imagem e autocompletar.
+
+const IMAGE_FILE = /\.(png|jpe?g|gif|svg|pdf|eps|webp)$/i;
+const FIGURES_DIR = 'figuras';
+
+const formatting = {
+    bold: () => editor.wrapSelection('\\textbf{', '}', 'texto'),
+    italic: () => editor.wrapSelection('\\textit{', '}', 'texto'),
+    underline: () => editor.wrapSelection('\\underline{', '}', 'texto'),
+    section: (command) => editor.insertSnippet('\\' + command + '{${título}}\n${}', { block: true }),
+    bullets: () => editor.insertSnippet('\\begin{itemize}\n\t\\item ${}\n\\end{itemize}\n', { block: true }),
+    numbers: () => editor.insertSnippet('\\begin{enumerate}\n\t\\item ${}\n\\end{enumerate}\n', { block: true }),
+    mathInline: () => editor.wrapSelection('$', '$', 'x'),
+    equation: () => editor.insertSnippet('\\begin{equation}\n\t${}\n\t\\label{eq:${rótulo}}\n\\end{equation}\n', { block: true }),
+    figure: () => openFigure(),
+    table: () => openTable(),
+    cite: () => {
+        editor.insertSnippet('\\cite{${}}');
+        editor.startCompletion();
+    },
+    ref: () => {
+        editor.insertSnippet('\\ref{${}}');
+        editor.startCompletion();
+    },
+    footnote: () => editor.wrapSelection('\\footnote{', '}', 'texto da nota'),
+};
+
+/** Caminho de `path` (relativo ao projeto) visto da pasta do arquivo principal. */
+function pathFromMainDir(path) {
+    const base = mainDir();
+    if (!base) return path;
+    if (path.startsWith(base + '/')) return path.slice(base.length + 1);
+    return '../'.repeat(base.split('/').length) + path;
+}
+
+/** Garante \usepackage{...} no preâmbulo do arquivo principal, perguntando antes. */
+async function ensurePackages(packages) {
+    if (!mainFile || !packages.length) return;
+    const isOpen = mainFile === currentFile;
+    const source = isOpen ? editor.getValue() : projectFiles[mainFile].content;
+    const missing = packages.filter(pkg =>
+        !new RegExp('\\\\(?:usepackage|RequirePackage)(?:\\[[^\\]]*\\])?\\{[^}]*\\b' + pkg + '\\b[^}]*\\}').test(source));
+    if (!missing.length) return;
+
+    const list = missing.map(p => `\\usepackage{${p}}`).join(', ');
+    if (!confirm(`Para isso funcionar, o documento precisa de ${list}.\n\nAdicionar ao preâmbulo de ${mainFile}?`)) return;
+
+    // Depois do último \usepackage (ou do \documentclass)
+    const lines = [...source.matchAll(/^\\(?:usepackage|documentclass)\b.*$/gm)];
+    const anchor = lines.length ? lines[lines.length - 1] : null;
+    const offset = anchor ? anchor.index + anchor[0].length : 0;
+    const text = missing.map(p => `\n\\usepackage{${p}}`).join('');
+
+    if (isOpen) {
+        editor.insertAt(offset, text);
+    } else {
+        projectFiles[mainFile].content = source.slice(0, offset) + text + source.slice(offset);
+        _dirtyFiles.add(mainFile);
+        saveCurrentProject();
+    }
+    showToast(`Pacote adicionado: ${missing.join(', ')}`, 'success');
+}
+
+/** Grava uma imagem (File do navegador) em figuras/ e devolve o caminho no projeto. */
+async function saveImageToProject(file, name = file.name) {
+    const safeName = name.replace(/[\\/:*?"<>|]/g, '-');
+    let path = `${FIGURES_DIR}/${safeName}`;
+    for (let i = 2; projectFiles[path]; i++) {
+        path = `${FIGURES_DIR}/${safeName.replace(/(\.[^.]+)?$/, `-${i}$1`)}`;
+    }
+    const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+    await StorageService.writeBinary(path, dataUrl.split(',')[1] || '');
+    if (!projectFiles[FIGURES_DIR]) projectFiles[FIGURES_DIR] = { type: 'folder' };
+    projectFiles[path] = { type: 'binary', content: null };
+    renderFileList();
+    return path;
+}
+
+/** Pede uma imagem do computador e copia para figuras/. */
+function pickImageFromComputer() {
+    return new Promise((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*,.pdf,.eps';
+        input.addEventListener('change', async () => {
+            const file = input.files[0];
+            resolve(file ? await saveImageToProject(file).catch((e) => { showToast(String(e), 'error'); return null; }) : null);
+        });
+        input.click();
+    });
+}
+
+function openFigure(initialProjectPath) {
+    const images = Object.keys(projectFiles).filter(p => IMAGE_FILE.test(p)).sort().map(pathFromMainDir);
+    openFigureDialog({
+        images,
+        initialImage: initialProjectPath ? pathFromMainDir(initialProjectPath) : undefined,
+        preview: (path) => StorageService.readImageDataUrl(joinPath(mainDir(), path)),
+        importImage: async () => {
+            const saved = await pickImageFromComputer();
+            return saved ? pathFromMainDir(saved) : null;
+        },
+        onInsert: async (code, packages) => {
+            editor.insertText(code + '\n', { block: true });
+            await ensurePackages(packages);
+        },
+    });
+}
+
+function openTable() {
+    openTableDialog({
+        onInsert: async (code, packages) => {
+            editor.insertText(code + '\n', { block: true });
+            await ensurePackages(packages);
+        },
+    });
+}
+
+/** Ctrl+V com imagem na área de transferência: salva em figuras/ e abre o diálogo. */
+async function pasteImage(file) {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    try {
+        const path = await saveImageToProject(file, `colada-${stamp}.${ext}`);
+        showToast(`Imagem salva em ${path}`, 'success');
+        openFigure(path);
+    } catch (e) {
+        showToast(String(e), 'error');
+    }
+}
+
+function initWritingTools() {
+    createToolbar(document.getElementById('editorToolbar'), formatting);
+    editor.setCompletionSources(createCompletionSources(() => ({ files: currentFiles(), mainDir: mainDir() })));
+    document.getElementById('tabFiles').addEventListener('click', () => showSidebarTab('files'));
+    document.getElementById('tabOutline').addEventListener('click', () => showSidebarTab('outline'));
+    document.getElementById('wordCount').addEventListener('click', showDetailedWordCount);
+    updateStats();
+}
+
+// ========== SUMÁRIO E CONTAGENS ==========
+
+/** projectFiles com o conteúdo atual do editor no arquivo aberto. */
+function currentFiles() {
+    const files = { ...projectFiles };
+    if (isTextFile(files[currentFile])) files[currentFile] = { ...files[currentFile], content: editor.getValue() };
+    return files;
+}
+
+const OUTLINE_ICONS = {
+    figure: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m21 16-5-5-9 9"/></svg>',
+    table: '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>',
+};
+
+function renderOutline() {
+    const list = document.getElementById('outlineList');
+    if (list.classList.contains('hidden')) return;
+    const items = buildOutline(currentFiles(), mainFile);
+
+    if (!items.length) {
+        const empty = document.createElement('p');
+        empty.className = 'outline-empty';
+        empty.textContent = mainFile
+            ? 'Nenhuma seção ainda. Use \\section{...} (ou o menu "Título" da barra) para estruturar o documento.'
+            : 'Defina o arquivo principal para ver o sumário.';
+        list.replaceChildren(empty);
+        return;
+    }
+
+    const minLevel = Math.min(...items.filter(i => i.kind === 'section').map(i => i.level), 9);
+    list.replaceChildren(...items.map((item) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        const isFloat = item.kind !== 'section';
+        btn.className = `outline-item${isFloat ? ' is-float' : ''}${!isFloat && item.level === minLevel ? ' is-major' : ''}`;
+        const depth = isFloat ? 0 : item.level - minLevel;
+        btn.style.paddingLeft = `${0.4 + depth * 0.85}rem`;
+        btn.title = `${item.file}:${item.line}`;
+        btn.innerHTML = (OUTLINE_ICONS[item.kind] || '') + `<span class="truncate">${escapeHtml(item.title)}</span>`;
+        btn.addEventListener('click', () => goToLine(item.line, item.file));
+        return btn;
+    }));
+}
+
+let statsTimer = null;
+
+/** Atualiza sumário e contagem de palavras (com espera, durante a digitação). */
+function scheduleStats(delay = 800) {
+    clearTimeout(statsTimer);
+    statsTimer = setTimeout(updateStats, delay);
+}
+
+function updateStats() {
+    const words = countWords(currentFiles(), mainFile);
+    document.getElementById('wordCount').textContent = `${words.toLocaleString('pt-BR')} ${words === 1 ? 'palavra' : 'palavras'}`;
+    const pages = pdfViewer ? pdfViewer.numPages : 0;
+    document.getElementById('pageCount').textContent = pages ? `${pages} ${pages === 1 ? 'página' : 'páginas'}` : '';
+    renderOutline();
+}
+
+async function showDetailedWordCount() {
+    if (!mainFile) return;
+    await saveCurrentProject();
+    try {
+        const output = await StorageService.wordCount(mainFile);
+        openWordCountDialog(parseTexcount(output), pdfViewer ? pdfViewer.numPages : 0);
+    } catch (e) {
+        showToast(String(e), 'error');
+    }
+}
+
+function showSidebarTab(tab) {
+    const showOutline = tab === 'outline';
+    document.getElementById('tabFiles').setAttribute('aria-selected', String(!showOutline));
+    document.getElementById('tabOutline').setAttribute('aria-selected', String(showOutline));
+    document.getElementById('fileList').classList.toggle('hidden', showOutline);
+    document.getElementById('outlineList').classList.toggle('hidden', !showOutline);
+    document.getElementById('fileActions').classList.toggle('hidden', showOutline);
+    if (showOutline) renderOutline();
+}
+
+// ========== CORRETOR ORTOGRÁFICO ==========
+const SPELL_PREF = 'caramelotex.spellcheck';
+let spellExtensions = null;
+
+/** Menu de sugestões, no mesmo componente do menu de arquivos. */
+function showSpellMenu(event, items) {
+    const menu = document.getElementById('actionMenu');
+    menu.innerHTML = '';
+    for (const item of items) {
+        if (item.separator) {
+            const sep = document.createElement('div');
+            sep.className = 'menu-separator';
+            menu.appendChild(sep);
+            continue;
+        }
+        const btn = document.createElement('button');
+        btn.className = 'menu-item';
+        btn.textContent = item.label;
+        if (item.muted) {
+            btn.disabled = true;
+            btn.classList.add('text-muted');
+        } else {
+            btn.addEventListener('click', () => {
+                hideActionMenu();
+                item.action();
+            });
+        }
+        menu.appendChild(btn);
+    }
+    let x = event.clientX;
+    let y = event.clientY;
+    if (x + 220 > window.innerWidth) x = window.innerWidth - 220;
+    if (y + 260 > window.innerHeight) y = window.innerHeight - 260;
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+    menu.classList.remove('hidden');
+}
+
+function setSpellcheck(enabled) {
+    if (!spellExtensions) {
+        spellExtensions = [
+            spellChecker({
+                check: (words) => StorageService.spellCheck(words),
+                suggest: (word) => StorageService.spellSuggest(word),
+                add: (word) => StorageService.spellAdd(word),
+                showMenu: showSpellMenu,
+            }),
+            spellTheme,
+        ];
+    }
+    editor.setExtras(enabled ? spellExtensions : []);
+    const btn = document.getElementById('spellBtn');
+    btn.setAttribute('aria-pressed', String(enabled));
+    btn.title = enabled ? 'Corretor ortográfico ligado (clique para desligar)' : 'Corretor ortográfico desligado (clique para ligar)';
+    try {
+        localStorage.setItem(SPELL_PREF, enabled ? 'on' : 'off');
+    } catch { /* sem storage */ }
+}
+
+function initSpellcheck() {
+    let enabled = true;
+    try {
+        enabled = localStorage.getItem(SPELL_PREF) !== 'off';
+    } catch { /* sem storage */ }
+    setSpellcheck(enabled);
+    document.getElementById('spellBtn').addEventListener('click', (event) => {
+        setSpellcheck(event.currentTarget.getAttribute('aria-pressed') !== 'true');
+    });
+}
+
+// ========== MUDANÇAS FEITAS FORA DO APP ==========
+
+/** O arquivo tem edições no app que ainda não foram gravadas? */
+function hasUnsavedEdits(path) {
+    if (_dirtyFiles.has(path)) return true;
+    return path === currentFile && isTextFile(projectFiles[path]) && editor.getValue() !== projectFiles[path].content;
 }
 
 /**
- * Configura o handler de reverse sync (Ctrl+click no PDF)
+ * Recarrega um arquivo de texto do disco (descarta a versão do app).
+ * Com `onlyIfClean`, desiste se o usuário editou o arquivo durante a leitura:
+ * nesse caso o conflito é tratado na próxima gravação.
  */
-function setupReverseSyncHandler() {
-    const pdfContainer = document.getElementById('pdfViewerContainer');
+async function reloadFromDisk(path, modified, { onlyIfClean = false } = {}) {
+    const content = await StorageService.readText(path);
+    const file = projectFiles[path];
+    if (!file || (onlyIfClean && hasUnsavedEdits(path))) return false;
+    file.content = content;
+    file.modified = modified;
+    _dirtyFiles.delete(path);
+    editor.forgetDoc(path);
+    if (path === currentFile) showInEditor(path);
+    return true;
+}
 
-    // Ctrl+click para reverse sync
-    pdfContainer.addEventListener('click', function(event) {
-        if (!event.ctrlKey) return;
-        if (!currentSynctexData) {
-            showToast('SyncTeX não disponível - compile o documento primeiro', 'warning');
-            return;
+/** O arquivo mudou no disco desde que foi lido: pergunta qual versão fica. */
+async function resolveConflict(path) {
+    const reload = confirm(
+        `"${path}" foi alterado fora do CarameloTeX (outro editor, Git ou sincronização).\n\n` +
+        'OK: usar a versão do disco (descarta suas alterações neste arquivo).\n' +
+        'Cancelar: manter a sua versão e gravar por cima.'
+    );
+    const file = projectFiles[path];
+    if (reload) {
+        const entry = (await StorageService.listFiles()).find(e => e.path === path);
+        await reloadFromDisk(path, entry ? entry.modified : 0);
+        showToast(`${path} recarregado do disco`, 'info');
+    } else {
+        file.modified = await StorageService.writeText(path, file.content);
+    }
+}
+
+let checkingExternal = false;
+
+/**
+ * Ao voltar para a janela: recarrega arquivos alterados fora do app que não
+ * têm edições pendentes e acompanha arquivos criados ou apagados na pasta.
+ */
+async function checkExternalChanges() {
+    // Durante uma gravação o horário dos arquivos está mudando: verifica depois
+    if (!projectRoot || checkingExternal || _isSaving) return;
+    checkingExternal = true;
+    try {
+        const entries = await StorageService.listFiles();
+        const onDisk = new Map(entries.map(e => [e.path, e]));
+        const updated = [];
+
+        for (const entry of entries) {
+            const file = projectFiles[entry.path];
+            if (!file) {
+                // Criado fora do app
+                projectFiles[entry.path] = entry.kind === 'folder'
+                    ? { type: 'folder' }
+                    : entry.kind === 'text' && entry.size <= StorageService.MAX_TEXT_SIZE
+                        ? { type: 'auxiliary', content: await StorageService.readText(entry.path), modified: entry.modified }
+                        : { type: 'binary', content: null, size: entry.size };
+                updated.push(entry.path);
+            } else if (isTextFile(file) && file.modified && entry.modified !== file.modified && !hasUnsavedEdits(entry.path)) {
+                if (await reloadFromDisk(entry.path, entry.modified, { onlyIfClean: true })) updated.push(entry.path);
+            }
+        }
+        // Apagados fora do app (o arquivo principal fica, para não perder o projeto)
+        for (const path of Object.keys(projectFiles)) {
+            if (!onDisk.has(path) && path !== mainFile && !hasUnsavedEdits(path)) {
+                editor.forgetDoc(path);
+                delete projectFiles[path];
+                updated.push(path);
+            }
         }
 
-        // Encontra qual página foi clicada
-        const pageWrapper = event.target.closest('.pdf-page-wrapper');
-        if (!pageWrapper) return;
-
-        const canvas = pageWrapper.querySelector('canvas');
-        if (!canvas) return;
-
-        const pageNum = parseInt(pageWrapper.dataset.pageNum);
-
-        // Calcula posição do clique no canvas
-        const rect = canvas.getBoundingClientRect();
-        const canvasX = (event.clientX - rect.left) * (canvas.width / rect.width);
-        const canvasY = (event.clientY - rect.top) * (canvas.height / rect.height);
-
-        reverseSyncToEditor(pageNum, canvasX, canvasY, canvas);
-    });
-
-    // Muda cursor quando Ctrl pressionado sobre o PDF
-    pdfContainer.addEventListener('mousemove', function(event) {
-        const isOverCanvas = event.target.tagName === 'CANVAS' ||
-                            event.target.closest('.pdf-page-wrapper');
-
-        if (event.ctrlKey && currentSynctexData && isOverCanvas) {
-            pdfContainer.style.cursor = 'crosshair';
-        } else {
-            pdfContainer.style.cursor = 'default';
+        if (updated.length) {
+            if (currentFile && !projectFiles[currentFile]) {
+                currentFile = mainFile;
+                showInEditor(mainFile);
+            }
+            renderFileList();
+            scheduleStats(0);
+            showToast(updated.length === 1 ? `${updated[0]} mudou fora do app e foi atualizado` : `${updated.length} arquivos mudaram fora do app e foram atualizados`, 'info');
         }
-    });
-
-    // Remove cursor especial quando Ctrl solta
-    document.addEventListener('keyup', function(event) {
-        if (event.key === 'Control') {
-            pdfContainer.style.cursor = 'default';
-        }
-    });
+    } catch (e) {
+        console.warn('Erro ao verificar mudanças externas:', e);
+    } finally {
+        checkingExternal = false;
+    }
 }
 
 // ========== EVENT LISTENERS ==========
@@ -1017,6 +1223,13 @@ function setupEventListeners() {
             console.error(e);
         }
         compile();
+    });
+
+    const themeBtn = document.getElementById('themeBtn');
+    themeBtn.title = themeLabel();
+    themeBtn.addEventListener('click', () => {
+        themeBtn.title = cycleTheme();
+        showToast(themeBtn.title, 'info');
     });
 
     document.getElementById('revealProjectBtn').addEventListener('click', () => {
@@ -1138,8 +1351,7 @@ async function initFileSystem(projectPath) {
     // Abre o arquivo principal (ou o primeiro .tex) no editor
     const firstText = Object.keys(projectFiles).sort().find(p => isTextFile(projectFiles[p]));
     currentFile = mainFile && projectFiles[mainFile] ? mainFile : firstText || null;
-    editor.setValue(currentFile ? projectFiles[currentFile].content : '');
-    editor.clearHistory();
+    showInEditor(currentFile);
 
     renderFileList();
     console.log(`Projeto aberto: ${projectRoot} (principal: ${mainFile || 'nenhum'})`);
@@ -1200,9 +1412,10 @@ async function addFile(filename, content, type = 'auxiliary') {
             await StorageService.writeBinary(filename, content);
             projectFiles[filename] = { type: 'binary', content: null };
         } else {
-            await StorageService.writeText(filename, content);
-            projectFiles[filename] = { type: filename === mainFile ? 'main' : 'auxiliary', content };
-            if (filename === currentFile) editor.setValue(content);
+            const modified = await StorageService.writeText(filename, content);
+            projectFiles[filename] = { type: filename === mainFile ? 'main' : 'auxiliary', content, modified };
+            editor.forgetDoc(filename);
+            if (filename === currentFile) showInEditor(filename);
         }
         renderFileList();
         showToast(`Arquivo salvo: ${filename.split('/').pop()}`, 'success');
@@ -1238,6 +1451,7 @@ async function removeItem(path) {
     Object.keys(projectFiles).forEach(key => {
         if (key === path || key.startsWith(path + '/')) {
             _dirtyFiles.delete(key);
+            editor.forgetDoc(key);
             delete projectFiles[key];
         }
     });
@@ -1245,7 +1459,7 @@ async function removeItem(path) {
     // Volta para o principal se o arquivo aberto sumiu
     if (currentFile && (currentFile === path || currentFile.startsWith(path + '/'))) {
         currentFile = mainFile;
-        editor.setValue(mainFile ? projectFiles[mainFile].content : '');
+        showInEditor(mainFile);
     }
 
     renderFileList();
@@ -1283,6 +1497,7 @@ async function renameItem(path) {
     Object.keys(projectFiles).forEach(key => {
         if (key === path || key.startsWith(path + '/')) {
             projectFiles[movePath(key)] = projectFiles[key];
+            editor.renameDoc(key, movePath(key));
             delete projectFiles[key];
         }
     });
@@ -1329,8 +1544,7 @@ function selectFile(filename) {
     syncEditorToCurrentFile();
 
     currentFile = filename;
-    editor.setValue(file.content);
-    editor.clearHistory();
+    showInEditor(filename);
     highlightErrors(lastLogEntries);
     renderFileList();
 }
@@ -1383,31 +1597,17 @@ function renderFileList() {
             const isMain = child.path === mainFile;
 
             const itemDiv = document.createElement('div');
-            const paddingLeft = level * 12 + 8;
-
-            itemDiv.className = `file-item flex items-center space-x-2 p-2 rounded mb-1 cursor-pointer transition-colors ${isActive ? 'bg-gray-800' : 'hover:bg-gray-700'} text-gray-300 select-none group relative`;
-            itemDiv.style.paddingLeft = `${paddingLeft}px`;
+            itemDiv.className = `file-item${isActive ? ' is-active' : ''}`;
+            itemDiv.style.paddingLeft = `${level * 14 + 8}px`;
             itemDiv.dataset.path = child.path;
 
-            let iconSvg = '';
-            if (isFolder) {
-                iconSvg = `<svg class="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
-                </svg>`;
-            } else {
-                const ext = child.name.split('.').pop();
-                iconSvg = getFileIcon(ext);
-            }
-
             itemDiv.innerHTML = `
-                ${iconSvg}
-                <span class="text-sm flex-1 truncate">${escapeHtml(child.name)}</span>
-                ${isMain ? '<span class="text-xs text-latex-green mr-2">✓</span>' : ''}
-
-                <!-- Menu Button (visible on hover or active) -->
-                <button class="file-menu-btn opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-600 rounded text-gray-400 hover:text-white transition-opacity">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path>
+                ${getFileIcon(isFolder ? null : child.name)}
+                <span class="flex-1 truncate">${escapeHtml(child.name)}</span>
+                ${isMain ? '<span class="file-main-badge" title="Arquivo principal (é o que é compilado)">principal</span>' : ''}
+                <button class="file-menu-btn" title="Opções" aria-label="Opções de ${escapeHtml(child.name)}">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                        <circle cx="10" cy="4" r="1.6"/><circle cx="10" cy="10" r="1.6"/><circle cx="10" cy="16" r="1.6"/>
                     </svg>
                 </button>
             `;
@@ -1464,7 +1664,7 @@ function showActionMenu(event, path) {
     // Common
     optionsInfo.push({ label: 'Renomear', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', action: 'RENAME' });
     if (!isMain) {
-        optionsInfo.push({ label: 'Mover para a Lixeira', icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16', action: 'DELETE', color: 'text-red-400' });
+        optionsInfo.push({ label: 'Mover para a Lixeira', icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16', action: 'DELETE', danger: true });
     }
 
     // Build menu DOM (avoid inline onclick)
@@ -1472,15 +1672,15 @@ function showActionMenu(event, path) {
     optionsInfo.forEach(opt => {
         if (opt.separator) {
             const sep = document.createElement('div');
-            sep.className = 'border-t border-gray-700 my-1';
+            sep.className = 'menu-separator';
             menu.appendChild(sep);
             return;
         }
         const btn = document.createElement('button');
-        btn.className = `w-full text-left px-4 py-2 text-sm ${opt.color || 'text-gray-300'} hover:bg-gray-700 hover:text-white transition-colors flex items-center space-x-2`;
+        btn.className = `menu-item${opt.danger ? ' is-danger' : ''}`;
         btn.innerHTML = `
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${opt.icon}"></path>
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="${opt.icon}"></path>
             </svg>
             <span>${escapeHtml(opt.label)}</span>
         `;
@@ -1499,8 +1699,9 @@ function showActionMenu(event, path) {
         y = event.clientY;
     }
 
-    // Boundary check (simple)
-    if (x + 160 > window.innerWidth) x -= 160;
+    // Mantém o menu dentro da janela
+    if (x + 200 > window.innerWidth) x = window.innerWidth - 200;
+    if (y + 220 > window.innerHeight) y = window.innerHeight - 220;
 
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
@@ -1540,14 +1741,22 @@ function handleMenuAction(action) {
     }
 }
 
-function getFileIcon(extension) {
-    const icons = {
-        'tex': '<svg class="w-4 h-4 text-latex-green" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>',
-        'pdf': '<svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>',
-        'png': '<svg class="w-4 h-4 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>',
-        'eps': '<svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>'
-    };
-    return icons[extension] || icons['tex'];
+const FILE_ICONS = {
+    folder: '<svg class="file-icon-folder" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4.2l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+    tex: '<svg class="file-icon-tex" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h4"/></svg>',
+    bib: '<svg class="file-icon-bib" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5zM5 19.5A1.5 1.5 0 0 0 6.5 21H19"/></svg>',
+    image: '<svg class="file-icon-image" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-9 9"/></svg>',
+    other: '<svg class="file-icon-other" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5"/></svg>',
+};
+
+/** Ícone do item da árvore: pasta (name null) ou pelo tipo do arquivo. */
+function getFileIcon(name) {
+    if (name === null) return FILE_ICONS.folder;
+    const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+    if (['tex', 'sty', 'cls', 'ltx'].includes(ext)) return FILE_ICONS.tex;
+    if (['bib', 'bst', 'bbx', 'cbx'].includes(ext)) return FILE_ICONS.bib;
+    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'pdf', 'eps', 'webp'].includes(ext)) return FILE_ICONS.image;
+    return FILE_ICONS.other;
 }
 
 const UPLOAD_TEXT_EXTS = /\.(tex|bib|sty|cls|bst|bbx|cbx|def|cfg|txt|md|csv|dat|json)$/i;
@@ -1595,35 +1804,4 @@ async function handleZipUpload(file) {
         console.error('Erro ao processar ZIP:', error);
         showToast('Erro ao processar arquivo ZIP', 'error');
     }
-}
-
-// ========== TOAST NOTIFICATIONS ==========
-function showToast(message, type = 'info') {
-    const container = document.getElementById('toastContainer');
-
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type} flex items-center space-x-3`;
-
-    const icons = {
-        success: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>',
-        error: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>',
-        warning: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>',
-        info: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>'
-    };
-
-    toast.innerHTML = `
-        <svg class="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            ${icons[type]}
-        </svg>
-        <span class="text-sm font-medium">${escapeHtml(message)}</span>
-    `;
-
-    container.appendChild(toast);
-
-    setTimeout(() => {
-        toast.style.transition = 'all 0.3s ease-out';
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateX(400px)';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
 }

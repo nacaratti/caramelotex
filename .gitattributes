@@ -1,0 +1,3 @@
+# Dicionario Hunspell: manter os bytes exatos (sem conversao de quebras de linha)
+src-tauri/resources/dict/*.aff -text
+src-tauri/resources/dict/*.dic -text

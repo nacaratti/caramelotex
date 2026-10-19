@@ -27,11 +27,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Revisão do pacote embutido: aumente sempre que mudar a lista de pacotes.
+# O app compara com a versão já instalada e reextrai o TinyTeX quando muda.
+$BundleRevision = 2
+
 # Pacotes do TeX Live além dos que já vêm no TinyTeX-1.
 # Mantenha em sincronia com os templates (src/templates/templates.json).
 $Packages = @(
-    # Ferramentas
-    'latexmk', 'biber', 'biblatex', 'natbib', 'cite', 'epstopdf', 'epstopdf-pkg',
+    # Ferramentas (texcount: contagem de palavras por seção)
+    'latexmk', 'biber', 'biblatex', 'natbib', 'cite', 'epstopdf', 'epstopdf-pkg', 'texcount',
     # Idioma e fontes
     'babel-portuges', 'hyphen-portuguese', 'babel-english', 'csquotes', 'cm-super', 'lm', 'lm-math',
     'fontspec', 'unicode-math', 'fontawesome5', 'microtype',
@@ -81,12 +85,15 @@ try {
 
     # Confere os programas e os arquivos usados pelos templates.
     $bin = Join-Path $WorkDir 'TinyTeX\bin\windows'
-    $tools = 'pdflatex', 'xelatex', 'lualatex', 'latexmk', 'bibtex', 'biber'
+    $tools = 'pdflatex', 'xelatex', 'lualatex', 'latexmk', 'bibtex', 'biber', 'texcount'
     $missing = @($tools | Where-Object { -not (Test-Path (Join-Path $bin "$_.exe")) })
     $required = 'IEEEtran.cls', 'beamer.cls', 'beamerthememetropolis.sty', 'portuges.ldf', 'fontawesome5.sty',
         'titlesec.sty', 'tocloft.sty', 'indentfirst.sty', 'tabularx.sty', 'biblatex.sty', 'abntex2.cls'
     $missing += @($required | Where-Object { -not (& (Join-Path $bin 'kpsewhich.exe') $_) })
     if ($missing) { throw "Itens ausentes após a instalação: $($missing -join ', ')" }
+
+    # Marca de versão lida pelo app (src-tauri/src/tex.rs)
+    Set-Content -Path (Join-Path $WorkDir 'TinyTeX\.caramelotex-version') -Value "$Version-r$BundleRevision" -NoNewline -Encoding ascii
 
     Write-Host '==> Compactando'
     $out = [IO.Path]::GetFullPath($OutFile)

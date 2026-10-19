@@ -1,0 +1,3 @@
+# O tauri dev não precisa recompilar quando o TinyTeX empacotado muda
+# (o OneDrive mexe no arquivo e causava recompilações em laço).
+resources/tinytex.zip

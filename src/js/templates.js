@@ -1,8 +1,11 @@
 /**
  * templates.js - Biblioteca de Templates LaTeX
  *
- * Depende de: vendor/templates-data.js (window.CARAMELO_TEMPLATES), storage.js
  */
+import './theme.js';
+import { StorageService } from './storage.js';
+import { escapeHtml } from './ui.js';
+import TEMPLATES from '../templates/templates.json';
 
 // ========== TEMPLATES DATA (embutidos no app) ==========
 let templates = [];
@@ -12,16 +15,6 @@ function templateMainContent(template) {
 }
 
 // ========== RENDER FUNCTIONS ==========
-
-function escapeHtml(str) {
-    if (typeof str !== 'string') return '';
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
 
 function getIconSvg(iconType) {
     const icons = {
@@ -38,22 +31,12 @@ function getIconSvg(iconType) {
 
 function getCategoryLabel(category) {
     const labels = {
-        academic: 'Academico',
-        thesis: 'Teses',
-        presentation: 'Apresentacoes',
+        academic: 'Acadêmico',
+        thesis: 'Tese',
+        presentation: 'Apresentação',
         professional: 'Profissional'
     };
     return labels[category] || category;
-}
-
-function getCategoryColor(category) {
-    const colors = {
-        academic: 'bg-blue-500',
-        thesis: 'bg-purple-500',
-        presentation: 'bg-orange-500',
-        professional: 'bg-green-500'
-    };
-    return colors[category] || 'bg-gray-500';
 }
 
 function renderTemplates(filteredTemplates) {
@@ -73,37 +56,24 @@ function renderTemplates(filteredTemplates) {
 
     filteredTemplates.forEach(template => {
         const card = document.createElement('div');
-        card.className = 'template-card bg-gray-800 border border-gray-700 rounded-lg p-6 hover:border-latex-green cursor-pointer';
+        card.className = 'template-card card p-5 flex flex-col hover:border-accent transition-colors cursor-pointer';
         card.dataset.templateId = template.id;
 
-        // Garante que tags é um array
         const tags = Array.isArray(template.tags) ? template.tags : [];
 
         card.innerHTML = `
             <div class="flex items-start justify-between mb-4">
-                <div class="p-3 bg-latex-gray rounded-lg">
-                    <svg class="w-8 h-8 text-latex-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        ${getIconSvg(template.icon)}
-                    </svg>
-                </div>
-                <span class="text-xs px-2 py-1 rounded ${getCategoryColor(template.category)} text-white">
-                    ${escapeHtml(getCategoryLabel(template.category))}
-                </span>
+                <svg class="w-8 h-8 text-accent-strong" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    ${getIconSvg(template.icon)}
+                </svg>
+                <span class="text-xs text-muted">${escapeHtml(getCategoryLabel(template.category))}</span>
             </div>
-            <h3 class="text-lg font-bold text-gray-200 mb-2">${escapeHtml(template.name)}</h3>
-            <p class="text-sm text-gray-400 mb-4 line-clamp-2">${escapeHtml(template.description || '')}</p>
-            <div class="flex flex-wrap gap-1 mb-4">
-                ${tags.slice(0, 3).map(tag =>
-                    `<span class="text-xs px-2 py-0.5 bg-gray-700 text-gray-300 rounded">${escapeHtml(tag)}</span>`
-                ).join('')}
-            </div>
+            <h3 class="font-semibold mb-1">${escapeHtml(template.name)}</h3>
+            <p class="text-sm text-muted mb-4 flex-1">${escapeHtml(template.description || '')}</p>
+            <p class="text-xs text-muted mb-4">${tags.slice(0, 3).map(escapeHtml).join(', ')}</p>
             <div class="flex gap-2">
-                <button class="preview-btn flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded text-sm font-medium transition-colors">
-                    Visualizar
-                </button>
-                <button class="use-btn flex-1 bg-latex-green hover:bg-teal-600 text-white py-2 rounded text-sm font-medium transition-colors">
-                    Usar
-                </button>
+                <button class="preview-btn btn flex-1 justify-center">Ver código</button>
+                <button class="use-btn btn btn-primary flex-1 justify-center">Usar</button>
             </div>
         `;
 
@@ -162,7 +132,7 @@ function copyCode() {
     navigator.clipboard.writeText(templateMainContent(currentPreviewTemplate)).then(() => {
         const btn = document.getElementById('copyCodeBtn');
         const originalText = btn.innerHTML;
-        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Copiado!';
+        btn.textContent = 'Copiado';
         setTimeout(() => {
             btn.innerHTML = originalText;
         }, 2000);
@@ -199,7 +169,7 @@ function filterTemplates() {
 // ========== INITIALIZATION ==========
 
 document.addEventListener('DOMContentLoaded', () => {
-    templates = window.CARAMELO_TEMPLATES || [];
+    templates = TEMPLATES;
     renderTemplates(templates);
 
     // Category buttons

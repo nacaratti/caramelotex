@@ -43,6 +43,8 @@ pub struct FileEntry {
     /// "folder", "text" ou "binary"
     kind: &'static str,
     size: u64,
+    /// Última modificação (ms desde 1970), para detectar mudanças feitas fora do app
+    modified: u64,
 }
 
 #[derive(Serialize)]
@@ -109,12 +111,14 @@ fn walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<FileEntry>) -> Resu
             if IGNORED_DIRS.contains(&name.as_str()) {
                 continue;
             }
-            out.push(FileEntry { path: rel, kind: "folder", size: 0 });
+            out.push(FileEntry { path: rel, kind: "folder", size: 0, modified: 0 });
             walk(root, &path, depth + 1, out)?;
         } else if name != CONFIG_FILE && !is_aux_file(&name) {
-            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            let metadata = entry.metadata().ok();
+            let size = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
+            let modified = metadata.as_ref().map(modified_ms).unwrap_or(0);
             let kind = if is_text_file(&path) { "text" } else { "binary" };
-            out.push(FileEntry { path: rel, kind, size });
+            out.push(FileEntry { path: rel, kind, size, modified });
         }
 
         if out.len() > MAX_ENTRIES {
@@ -256,10 +260,36 @@ pub fn read_binary_file(path: String, state: State<'_, AppState>) -> Result<Stri
         .map_err(|e| format!("Erro ao ler {path}: {e}"))
 }
 
+fn modified_ms(metadata: &fs::Metadata) -> u64 {
+    metadata
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Prefixo do erro de conflito; a interface pergunta o que fazer.
+pub const CONFLICT_PREFIX: &str = "CONFLITO:";
+
+/// Grava um arquivo de texto e devolve o novo horário de modificação.
+/// Com `expected_modified`, recusa se o arquivo foi alterado fora do app
+/// depois da leitura (git pull, outro editor, sincronização...).
 #[tauri::command]
-pub fn write_text_file(path: String, content: String, state: State<'_, AppState>) -> Result<(), String> {
+pub fn write_text_file(
+    path: String,
+    content: String,
+    expected_modified: Option<u64>,
+    state: State<'_, AppState>,
+) -> Result<u64, String> {
     let full = resolve_in_root(&current_root(&state)?, &path)?;
-    write_atomic(&full, content.as_bytes())
+    if let (Some(expected), Ok(metadata)) = (expected_modified, fs::metadata(&full)) {
+        if expected != 0 && modified_ms(&metadata) != expected {
+            return Err(format!("{CONFLICT_PREFIX} {path} foi alterado fora do CarameloTeX"));
+        }
+    }
+    write_atomic(&full, content.as_bytes())?;
+    Ok(fs::metadata(&full).map(|m| modified_ms(&m)).unwrap_or(0))
 }
 
 #[tauri::command]

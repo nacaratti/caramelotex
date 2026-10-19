@@ -1,12 +1,19 @@
 /**
  * storage.js - Acesso aos projetos locais (pastas do computador do usuário)
  *
- * Depende de: vendor/tauri-bridge.js (window.TauriBridge)
+ * Módulo ES: usa as APIs do Tauri diretamente.
  *
  * Um projeto é uma pasta. O backend Rust mantém a pasta aberta e todos os
  * caminhos trocados com ele são relativos a ela, com "/" como separador.
  */
-const StorageService = {
+import { invoke as tauriInvoke, isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { load as loadStore } from '@tauri-apps/plugin-store';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
+import JSZip from 'jszip';
+
+export const StorageService = {
     CURRENT_PROJECT_KEY: 'caramelotex.currentProject',
     RECENTS_FILE: 'recent-projects.json',
     MAX_RECENTS: 20,
@@ -14,10 +21,10 @@ const StorageService = {
     MAX_TEXT_SIZE: 4 * 1024 * 1024,
 
     _invoke(cmd, args) {
-        if (!window.TauriBridge) {
+        if (!isTauri()) {
             return Promise.reject(new Error('O CarameloTeX precisa rodar como aplicativo (Tauri), não no navegador.'));
         }
-        return window.TauriBridge.invoke(cmd, args);
+        return tauriInvoke(cmd, args);
     },
 
     // ---------------------------------------------------------------
@@ -37,7 +44,7 @@ const StorageService = {
     // ---------------------------------------------------------------
 
     async _recentsStore() {
-        return window.TauriBridge.loadStore(this.RECENTS_FILE, { autoSave: false });
+        return loadStore(this.RECENTS_FILE, { autoSave: false });
     },
 
     /** @returns {Promise<Array<{path: string, name: string, lastOpened: number}>>} */
@@ -67,7 +74,7 @@ const StorageService = {
 
     /** Pede uma pasta ao usuário. Retorna o caminho ou null se cancelar. */
     async pickFolder(title) {
-        const result = await window.TauriBridge.openDialog({ directory: true, multiple: false, title });
+        const result = await openDialog({ directory: true, multiple: false, title });
         return result || null;
     },
 
@@ -110,6 +117,7 @@ const StorageService = {
             files[entry.path] = {
                 type: entry.path === info.mainFile ? 'main' : 'auxiliary',
                 content,
+                modified: entry.modified,
             };
         }));
 
@@ -120,8 +128,29 @@ const StorageService = {
     // Operações de arquivo (caminhos relativos ao projeto aberto)
     // ---------------------------------------------------------------
 
-    writeText(path, content) {
-        return this._invoke('write_text_file', { path, content });
+    /**
+     * Grava texto e devolve o novo horário de modificação. Com `expectedModified`,
+     * falha com "CONFLITO: ..." se o arquivo mudou no disco desde a leitura.
+     */
+    writeText(path, content, expectedModified = null) {
+        return this._invoke('write_text_file', { path, content, expectedModified });
+    },
+
+    readText(path) {
+        return this._invoke('read_text_file', { path });
+    },
+
+    /** Listagem atual da pasta: [{ path, kind, size, modified }]. */
+    listFiles() {
+        return this._invoke('list_project_files');
+    },
+
+    /** Imagem do projeto como data URL (para pré-visualização). */
+    async readImageDataUrl(path) {
+        const base64 = await this._invoke('read_binary_file', { path });
+        const ext = path.split('.').pop().toLowerCase();
+        const mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml', gif: 'image/gif', webp: 'image/webp' }[ext] || 'image/png';
+        return `data:${mime};base64,${base64}`;
     },
 
     writeBinary(path, base64) {
@@ -148,7 +177,7 @@ const StorageService = {
     async revealInExplorer(root, relPath) {
         const sep = root.includes('\\') ? '\\' : '/';
         const full = relPath ? root + sep + relPath.split('/').join(sep) : root;
-        await window.TauriBridge.revealItemInDir(full);
+        await revealItemInDir(full);
     },
 
     // ---------------------------------------------------------------
@@ -165,7 +194,7 @@ const StorageService = {
 
     /**
      * Extrai um .zip de projeto LaTeX para dentro do projeto aberto.
-     * Depende de window.JSZip. Retorna { added, skipped }.
+     * Retorna { added, skipped }.
      */
     async importZip(file) {
         const TEXT_EXTS = ['tex', 'bib', 'cls', 'sty', 'bst', 'bbx', 'cbx', 'def', 'cfg', 'txt', 'md', 'csv', 'dat', 'json'];
@@ -227,7 +256,7 @@ const StorageService = {
     async prepareTex(onProgress) {
         let unlisten = null;
         if (onProgress) {
-            unlisten = await window.TauriBridge.listen('tex-setup-progress', (event) => {
+            unlisten = await listen('tex-setup-progress', (event) => {
                 onProgress(event.payload.done, event.payload.total);
             });
         }
@@ -239,10 +268,34 @@ const StorageService = {
     },
 
     /**
-     * @returns {Promise<{ok, pdf, synctex, log, output, engine, texSource, durationMs, cancelled, timedOut}>}
+     * @returns {Promise<{ok, pdfFile, synctexFile, log, output, engine, texSource, durationMs, cancelled, timedOut}>}
      */
     compile(mainFile, engine) {
         return this._invoke('compile_project', { mainFile, engine, timeoutSecs: null });
+    },
+
+    /** Bytes de um arquivo da pasta de build (PDF ou .synctex.gz). */
+    async readBuildFile(name) {
+        const buffer = await this._invoke('read_build_file', { name });
+        return new Uint8Array(buffer);
+    },
+
+    /** Saída do texcount para o arquivo principal (contagem detalhada). */
+    wordCount(mainFile) {
+        return this._invoke('word_count', { mainFile });
+    },
+
+    /** Palavras (da lista) que o corretor pt-BR não conhece. */
+    spellCheck(words) {
+        return this._invoke('spell_check', { words });
+    },
+
+    spellSuggest(word) {
+        return this._invoke('spell_suggest', { word });
+    },
+
+    spellAdd(word) {
+        return this._invoke('spell_add', { word });
     },
 
     cancelCompile() {
@@ -257,7 +310,7 @@ const StorageService = {
     /** Pergunta onde salvar e copia o PDF compilado. Retorna o caminho ou null. */
     async exportPdf(mainFile) {
         const baseName = mainFile.split('/').pop().replace(/\.tex$/i, '');
-        const dest = await window.TauriBridge.saveDialog({
+        const dest = await saveDialog({
             title: 'Salvar PDF',
             defaultPath: `${baseName}.pdf`,
             filters: [{ name: 'PDF', extensions: ['pdf'] }],
@@ -267,3 +320,5 @@ const StorageService = {
         return dest;
     },
 };
+
+export default StorageService;

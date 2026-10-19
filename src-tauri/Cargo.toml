@@ -1,6 +1,6 @@
 [package]
 name = "caramelotex"
-version = "0.1.0"
+version = "0.2.0"
 description = "Editor LaTeX offline"
 authors = ["Davi Pontes Nacaratti"]
 edition = "2021"
@@ -23,3 +23,4 @@ base64 = "0.22"
 dunce = "1"
 trash = "5"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+spellbook = "0.4.2"
