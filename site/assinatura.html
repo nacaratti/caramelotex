@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code signing policy do CarameloTeX</title>
+    <meta name="description"
+        content="Como o instalador do CarameloTeX é gerado e assinado, quem aprova cada versão e o que o programa faz com os seus dados.">
+    <link rel="icon" type="image/png" href="img/favicon.png">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <header class="site-header">
+        <div class="wrap">
+            <a class="brand" href="./">
+                <img src="img/caramelo_login.png" alt="" width="64" height="100">
+                CarameloTeX
+            </a>
+            <nav aria-label="Seções">
+                <a href="./#baixar">Baixar</a>
+                <a href="./#funcionalidades">Funcionalidades</a>
+                <a href="./#perguntas">Perguntas</a>
+                <a href="sobre">Sobre</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="page-head">
+            <div class="wrap">
+                <h1>Code signing policy</h1>
+                <p class="lead">Política de assinatura de código: como o instalador é gerado, quem aprova cada versão e
+                    o que o programa faz com os seus dados.</p>
+            </div>
+        </div>
+
+        <section class="policy">
+            <div class="wrap">
+                <p class="attribution">Free code signing provided by <a href="https://signpath.io">SignPath.io</a>,
+                    certificate by <a href="https://signpath.org">SignPath Foundation</a>.</p>
+                <p>A assinatura vale para as versões publicadas depois da aprovação do projeto pela SignPath
+                    Foundation. Nas versões assinadas, o Windows mostra a SignPath Foundation como editora do
+                    instalador.</p>
+
+                <h2>Como o instalador é gerado</h2>
+                <p>O instalador é montado pelo GitHub Actions a partir do
+                    <a href="https://github.com/nacaratti/caramelotex">código público do repositório</a>, incluindo os
+                    scripts de build. Nenhum arquivo é compilado ou assinado no computador de alguém da equipe. Cada
+                    versão só é assinada depois de aprovada manualmente, e o resultado é publicado nas
+                    <a href="https://github.com/nacaratti/caramelotex/releases">releases do GitHub</a>.</p>
+
+                <h2>Equipe e funções</h2>
+                <dl class="roles">
+                    <dt>Autores (committers)</dt>
+                    <dd><a href="https://github.com/nacaratti">Davi Pontes Nacaratti</a>, que pode alterar o código
+                        sem outra revisão.</dd>
+                    <dt>Revisores</dt>
+                    <dd><a href="https://github.com/nacaratti">Davi Pontes Nacaratti</a>, que revisa toda contribuição
+                        de quem não é autor antes de entrar no código.</dd>
+                    <dt>Aprovadores</dt>
+                    <dd><a href="https://github.com/nacaratti">Davi Pontes Nacaratti</a>, que aprova cada pedido de
+                        assinatura.</dd>
+                </dl>
+                <p>Todos os membros usam autenticação em duas etapas no GitHub e na SignPath.</p>
+
+                <h2>Privacidade</h2>
+                <p>Este programa não transfere nenhuma informação para outros sistemas em rede, a menos que o usuário
+                    peça especificamente. Os documentos ficam nas pastas escolhidas pelo usuário, o PDF é gerado no
+                    computador e o corretor ortográfico funciona sem internet.</p>
+                <p>A única conexão acontece quando o usuário pede para instalar ou buscar um pacote LaTeX: o
+                    gerenciador do TeX Live (<code>tlmgr</code>) baixa a lista e os pacotes de um espelho da
+                    <a href="https://ctan.org">CTAN</a>. Nessa conexão, o espelho recebe apenas o pedido de download,
+                    como acontece em qualquer download pela internet.</p>
+
+                <h2>Contato</h2>
+                <p>Para relatar um problema com a assinatura ou com o instalador, escreva para
+                    <a href="mailto:davinacaratti@gmail.com">davinacaratti@gmail.com</a> ou abra uma
+                    <a href="https://github.com/nacaratti/caramelotex/issues">issue no GitHub</a>.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="wrap">
+            <span>CarameloTeX, editor LaTeX offline.</span>
+            <span class="footer-links"><a href="./">Página inicial</a> <a href="https://github.com/nacaratti/caramelotex">Código no GitHub</a></span>
+        </div>
+    </footer>
+
+</body>
+
+</html>

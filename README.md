@@ -88,11 +88,23 @@ CARAMELOTEX_TEX_BIN=".../TinyTeX/bin/windows" cargo test --manifest-path src-tau
 
 ### Publicar uma versão
 
-1. Atualize a versão em `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`.
-2. `npm run tauri build`.
-3. Crie a release no GitHub anexando o instalador com o nome fixo
-   **`CarameloTeX-setup-x64.exe`** (a landing page aponta para
-   `releases/latest/download/CarameloTeX-setup-x64.exe`).
+1. Atualize a versão em `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`
+   e o histórico em `site/sobre.html`.
+2. Faça o commit e envie uma tag com a mesma versão: `git tag v0.4.0 && git push origin v0.4.0`.
+3. O workflow [`release.yml`](.github/workflows/release.yml) gera o instalador no GitHub
+   Actions, pede a assinatura à SignPath (aprove no painel dela) e cria a release como
+   rascunho com o arquivo **`CarameloTeX-setup-x64.exe`** (nome fixo: a landing aponta para
+   `releases/latest/download/CarameloTeX-setup-x64.exe`). Revise e publique o rascunho.
+
+A assinatura usa o secret `SIGNPATH_API_TOKEN` e as variáveis `SIGNPATH_ORGANIZATION_ID`,
+`SIGNPATH_PROJECT_SLUG` e `SIGNPATH_SIGNING_POLICY_SLUG` do repositório; sem elas, o
+instalador sai sem assinatura. A configuração de artefato da SignPath está em
+[`.signpath/artifact-configuration.xml`](.signpath/artifact-configuration.xml), e a política
+de assinatura em `site/assinatura.html` (publicada em `/assinatura`).
+
+## Licença
+
+O CarameloTeX é distribuído sob a [licença MIT](LICENSE).
 
 ## Licenças de terceiros
 

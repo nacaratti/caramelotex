@@ -556,6 +556,42 @@ section h2 {
     overflow-wrap: anywhere;
 }
 
+/* Página da política de assinatura: texto corrido */
+.policy .wrap > * {
+    max-width: 44rem;
+}
+
+.policy h2 {
+    font-size: var(--t-xl);
+    line-height: 1.15;
+    margin: 2.75rem 0 0.75rem;
+}
+
+.policy p {
+    margin: 0 0 1rem;
+}
+
+.policy code {
+    font-family: var(--mono);
+    font-size: 0.95em;
+}
+
+.attribution {
+    padding: 1rem 1.25rem;
+    border-left: 4px solid var(--caramelo);
+    background: var(--caramelo-claro);
+    font-weight: 700;
+}
+
+.roles dt {
+    font-weight: 700;
+    margin-top: 1rem;
+}
+
+.roles dd {
+    margin: 0.2rem 0 0;
+}
+
 .site-header nav a[aria-current="page"] {
     text-decoration: underline;
     text-decoration-thickness: 2px;

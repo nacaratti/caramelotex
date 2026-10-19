@@ -1,0 +1,110 @@
+# Gera o instalador do CarameloTeX a partir do código do repositório, assina
+# com a SignPath (quando configurada) e cria a release como rascunho.
+#
+# Dispara ao enviar uma tag de versão (git tag v0.4.0 && git push origin v0.4.0)
+# ou manualmente pela aba Actions (só gera o instalador, sem release).
+#
+# Assinatura: defina no repositório (Settings > Secrets and variables > Actions)
+#   secret   SIGNPATH_API_TOKEN
+#   variáveis SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_SLUG, SIGNPATH_SIGNING_POLICY_SLUG
+# Sem essas variáveis, o instalador sai sem assinatura.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Conferir versão da tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ("v$version" -ne $env:GITHUB_REF_NAME) {
+            throw "A tag $env:GITHUB_REF_NAME não bate com a versão do package.json ($version)"
+          }
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # O TinyTeX leva ~25 min para montar; só refaz quando o script muda.
+      - name: Restaurar TinyTeX
+        id: tinytex
+        uses: actions/cache@v6
+        with:
+          path: src-tauri/resources/tinytex.zip
+          key: tinytex-${{ hashFiles('scripts/build-tinytex.ps1') }}
+
+      - name: Montar TinyTeX
+        if: steps.tinytex.outputs.cache-hit != 'true'
+        shell: powershell
+        run: ./scripts/build-tinytex.ps1
+
+      - run: npm ci
+
+      - name: Gerar instalador
+        run: npm run tauri build
+
+      - name: Renomear instalador
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          if (-not $exe) { throw 'Instalador não encontrado' }
+          New-Item -ItemType Directory -Force unsigned | Out-Null
+          Copy-Item $exe.FullName unsigned/CarameloTeX-setup-x64.exe
+
+      - name: Enviar instalador sem assinatura
+        id: upload-unsigned
+        uses: actions/upload-artifact@v7
+        with:
+          name: instalador-sem-assinatura
+          path: unsigned/CarameloTeX-setup-x64.exe
+          if-no-files-found: error
+
+      # A SignPath pede aprovação manual de cada assinatura: aprove pelo painel
+      # dela em até 4 horas, senão o passo falha.
+      - name: Assinar com a SignPath
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 14400
+          output-artifact-directory: signed
+
+      - name: Criar release (rascunho)
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $file = 'signed/CarameloTeX-setup-x64.exe'
+          if (-not (Test-Path $file)) {
+            Write-Warning 'Instalador sem assinatura (SignPath não configurada)'
+            $file = 'unsigned/CarameloTeX-setup-x64.exe'
+          }
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          gh release create $env:GITHUB_REF_NAME $file --draft --title "CarameloTeX $version" --generate-notes

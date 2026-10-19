@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Configuração de artefato da SignPath (copie para o projeto no painel da SignPath).
+  O GitHub Actions envia o instalador dentro de um .zip (actions/upload-artifact),
+  por isso a raiz é <zip-file>. product-name restringe a assinatura a binários
+  com o nome do produto do CarameloTeX.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="CarameloTeX-setup-x64.exe" product-name="CarameloTeX">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>
