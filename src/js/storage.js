@@ -285,6 +285,23 @@ export const StorageService = {
         return this._invoke('word_count', { mainFile });
     },
 
+    /**
+     * Pacotes do LaTeX: instalados (offline) ou todos os do repositório
+     * (remote = true, precisa de internet). [{ name, installed, description }]
+     */
+    listTexPackages(remote = false) {
+        return this._invoke('list_tex_packages', { remote });
+    },
+
+    installTexPackage(name) {
+        return this._invoke('install_tex_package', { name });
+    },
+
+    /** Dos arquivos pedidos (ex.: "booktabs.sty"), devolve os que existem. */
+    checkTexFiles(files) {
+        return this._invoke('check_tex_files', { files });
+    },
+
     /** Palavras (da lista) que o corretor pt-BR não conhece. */
     spellCheck(words) {
         return this._invoke('spell_check', { words });

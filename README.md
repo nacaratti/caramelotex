@@ -18,11 +18,17 @@ localmente.
   sublinhados no código.
 - **Barra de formatação:** negrito, itálico, títulos, listas, equações, citação,
   referência e nota de rodapé (Ctrl+B, Ctrl+I).
+- **Editor visual de equações (Ctrl+Shift+E):** monte a fórmula vendo o
+  resultado, com botões de estruturas (fração, raiz, integral, matriz...) e
+  símbolos; o LaTeX é gerado e pode ser editado. Feito com MathLive, offline.
 - **Inserir figura e tabela:** diálogos que geram o código, com legenda e
   rótulo; cole uma imagem (Ctrl+V) ou células do Excel/Google Planilhas. Os
   pacotes necessários são adicionados ao preâmbulo.
 - **Compilação:** pdfLaTeX, XeLaTeX ou LuaLaTeX com latexmk (BibTeX e biber
   automáticos). Pacote faltando? O app oferece instalar.
+- **Pacotes LaTeX (ícone da caixa):** veja os pacotes que o documento usa e
+  quais faltam, a lista dos instalados e busque entre os ~8 mil do TeX Live
+  para instalar com um clique (via `tlmgr`; busca e instalação precisam de internet).
 - **PDF rápido:** só as páginas visíveis são desenhadas, a posição de leitura é
   mantida ao recompilar, zoom e ajuste à largura.
 - **SyncTeX:** duplo clique no código mostra o trecho no PDF; Ctrl+clique no
@@ -91,5 +97,5 @@ CARAMELOTEX_TEX_BIN=".../TinyTeX/bin/windows" cargo test --manifest-path src-tau
 ## Licenças de terceiros
 
 TinyTeX/TeX Live (licenças livres dos respectivos pacotes), dicionário VERO
-pt-BR (LGPLv3/MPL), fontes IBM Plex Sans e JetBrains Mono (OFL), Latin Modern
+pt-BR (LGPLv3/MPL), MathLive (MIT), fontes IBM Plex Sans e JetBrains Mono (OFL), KaTeX (MIT), Latin Modern
 (GUST Font License).

@@ -190,19 +190,195 @@ fn tlmgr_path(install: &TexInstall) -> PathBuf {
         .join(if cfg!(windows) { "tlmgr.bat" } else { "tlmgr" })
 }
 
-/// Roda o tlmgr sem abrir janela de console e devolve (sucesso, saída).
-fn run_tlmgr(install: &TexInstall, args: &[&str]) -> Result<(bool, String), String> {
-    let mut cmd = std::process::Command::new(tlmgr_path(install));
-    cmd.args(args).stdin(std::process::Stdio::null());
+/// Perl e tlmgr.pl da própria instalação (TinyTeX/TeX Live no Windows).
+/// Chamá-los direto evita o tlmgr.bat, que passa pelo cmd e quebra
+/// argumentos com vírgula (ex.: --data name,shortdesc).
+fn tlmgr_perl(install: &TexInstall) -> Option<(PathBuf, PathBuf)> {
+    let root = install.bin_dir.parent()?.parent()?;
+    let perl = root.join("tlpkg/tlperl/bin").join(format!("perl{EXE}"));
+    let script = root.join("texmf-dist/scripts/texlive/tlmgr.pl");
+    (perl.is_file() && script.is_file()).then_some((perl, script))
+}
+
+fn has_tlmgr(install: &TexInstall) -> bool {
+    tlmgr_perl(install).is_some() || tlmgr_path(install).is_file()
+}
+
+/// Roda o tlmgr sem abrir janela de console e devolve (sucesso, saída padrão, erros).
+fn run_tlmgr_split(install: &TexInstall, args: &[&str]) -> Result<(bool, String, String), String> {
+    let mut cmd = match tlmgr_perl(install) {
+        Some((perl, script)) => {
+            let mut c = std::process::Command::new(perl);
+            c.arg(script);
+            c
+        }
+        None => std::process::Command::new(tlmgr_path(install)),
+    };
+    let mut paths = vec![install.bin_dir.clone()];
+    if let Some(existing) = std::env::var_os("PATH") {
+        paths.extend(std::env::split_paths(&existing));
+    }
+    cmd.args(args)
+        .env("PATH", std::env::join_paths(paths).map_err(|e| e.to_string())?)
+        .stdin(std::process::Stdio::null());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
     let out = cmd.output().map_err(|e| format!("Não foi possível executar o tlmgr: {e}"))?;
-    let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
-    text.push_str(&String::from_utf8_lossy(&out.stderr));
-    Ok((out.status.success(), text))
+    Ok((
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    ))
+}
+
+/// Como `run_tlmgr_split`, com a saída e os erros juntos.
+fn run_tlmgr(install: &TexInstall, args: &[&str]) -> Result<(bool, String), String> {
+    let (ok, mut out, err) = run_tlmgr_split(install, args)?;
+    out.push_str(&err);
+    Ok((ok, out))
+}
+
+#[derive(Serialize)]
+pub struct PackageInfo {
+    name: String,
+    installed: bool,
+    description: String,
+}
+
+/// Lê linhas `nome,"descrição"` ou `nome,0|1,"descrição"` do `tlmgr info --data`.
+fn parse_package_list(output: &str, with_installed_flag: bool) -> Vec<PackageInfo> {
+    let mut packages = Vec::new();
+    for line in output.lines() {
+        let line = line.trim();
+        let Some((name, rest)) = line.split_once(',') else { continue };
+        if name.is_empty() || name.contains(char::is_whitespace) || name.contains(':') {
+            continue;
+        }
+        let (installed, desc) = if with_installed_flag {
+            match rest.split_once(',') {
+                Some((flag, desc)) => (flag.trim() == "1", desc),
+                None => continue,
+            }
+        } else {
+            (true, rest)
+        };
+        packages.push(PackageInfo { name: name.to_string(), installed, description: unquote(desc) });
+    }
+    packages
+}
+
+/// O tlmgr põe a descrição entre aspas e escapa as internas com barra (\").
+fn unquote(field: &str) -> String {
+    let field = field.trim();
+    let inner = field
+        .strip_prefix('"')
+        .and_then(|s| s.strip_suffix('"'))
+        .unwrap_or(field);
+    let mut out = String::with_capacity(inner.len());
+    let mut chars = inner.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some(next @ ('"' | '\\')) => out.push(next),
+                Some(next) => { out.push(c); out.push(next); }
+                None => out.push(c),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+fn require_tlmgr(app: &AppHandle, state: &AppState) -> Result<TexInstall, String> {
+    let install = current_install(app, state).ok_or("Nenhuma distribuição LaTeX encontrada")?;
+    if !has_tlmgr(&install) {
+        return Err("Esta distribuição LaTeX não usa o tlmgr. No MiKTeX, os pacotes são instalados pelo MiKTeX Console ou automaticamente na compilação.".into());
+    }
+    Ok(install)
+}
+
+/// Pacotes do LaTeX. `remote = false`: só os instalados (funciona offline).
+/// `remote = true`: todos os do repositório, com a marcação de instalado (precisa de internet).
+#[tauri::command]
+pub async fn list_tex_packages(app: AppHandle, state: State<'_, AppState>, remote: bool) -> Result<Vec<PackageInfo>, String> {
+    let install = require_tlmgr(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let args: &[&str] = if remote {
+            &["info", "--data", "name,installed,shortdesc"]
+        } else {
+            &["info", "--only-installed", "--data", "name,shortdesc"]
+        };
+        let (_, out, err) = run_tlmgr_split(&install, args)?;
+        let packages = parse_package_list(&out, remote);
+        if packages.is_empty() {
+            return Err(if remote {
+                format!("Não foi possível consultar o repositório de pacotes. Verifique a internet.\n{err}")
+            } else {
+                format!("Não foi possível listar os pacotes instalados.\n{err}")
+            });
+        }
+        Ok(packages)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Instala um pacote do repositório do TeX Live pelo nome (precisa de internet).
+#[tauri::command]
+pub async fn install_tex_package(app: AppHandle, state: State<'_, AppState>, name: String) -> Result<String, String> {
+    let valid = !name.is_empty()
+        && name.len() < 80
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || "._+-".contains(c));
+    if !valid {
+        return Err(format!("Nome de pacote inválido: {name}"));
+    }
+    let install = require_tlmgr(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let (ok, output) = run_tlmgr(&install, &["install", &name])?;
+        if ok {
+            Ok(output)
+        } else {
+            Err(format!("Falha ao instalar {name}:\n{output}"))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Quais destes arquivos (ex.: "booktabs.sty") a distribuição LaTeX encontra.
+#[tauri::command]
+pub async fn check_tex_files(app: AppHandle, state: State<'_, AppState>, files: Vec<String>) -> Result<Vec<String>, String> {
+    let install = current_install(&app, &state).ok_or("Nenhuma distribuição LaTeX encontrada")?;
+    let files: Vec<String> = files
+        .into_iter()
+        .filter(|f| !f.is_empty() && f.len() < 100 && f.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c)))
+        .collect();
+    if files.is_empty() {
+        return Ok(Vec::new());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd = std::process::Command::new(install.tool("kpsewhich"));
+        cmd.args(&files).stdin(std::process::Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000);
+        }
+        let out = cmd.output().map_err(|e| format!("Não foi possível executar o kpsewhich: {e}"))?;
+        // Imprime só os encontrados, um caminho por linha
+        let found: Vec<String> = String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .filter_map(|l| l.trim().rsplit(['/', '\\']).next().map(str::to_string))
+            .filter(|n| !n.is_empty())
+            .collect();
+        Ok(found)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Nome do pacote do TeX Live que contém `file`, a partir da saída de
@@ -237,7 +413,7 @@ pub async fn install_missing_file(
         return Err(format!("Nome de arquivo inválido: {file}"));
     }
     let install = current_install(&app, &state).ok_or("Nenhuma distribuição LaTeX encontrada")?;
-    if !tlmgr_path(&install).is_file() {
+    if !has_tlmgr(&install) {
         return Err("Esta distribuição LaTeX não usa o tlmgr. No MiKTeX, os pacotes são instalados automaticamente na compilação.".into());
     }
 
@@ -316,5 +492,28 @@ mod tests {
                       fontawesome5:\n\ttexmf-dist/tex/latex/fontawesome5/fontawesome5.sty\n";
         assert_eq!(package_for_file(output, "fontawesome5.sty").as_deref(), Some("fontawesome5"));
         assert_eq!(package_for_file(output, "nada.sty"), None);
+    }
+
+    #[test]
+    fn parses_tlmgr_package_lists() {
+        let local = "abntex2,\"Typeset Brazilian documents\"
+tlmgr.pl: aviso qualquer
+booktabs,\"Publication quality tables, in LaTeX\"
+";
+        let pkgs = parse_package_list(local, false);
+        assert_eq!(pkgs.len(), 2);
+        assert_eq!(pkgs[1].name, "booktabs");
+        assert!(pkgs[1].installed);
+        assert_eq!(pkgs[1].description, "Publication quality tables, in LaTeX");
+
+        let remote = "siunitx,1,\"A comprehensive (SI) units package\"
+tikz-feynman,0,\"Feynman diagrams with TikZ\"
+";
+        let pkgs = parse_package_list(remote, true);
+        assert!(pkgs[0].installed && !pkgs[1].installed);
+        assert_eq!(pkgs[1].description, "Feynman diagrams with TikZ");
+
+        let quoted = r#"antanilipsum,0,"Generate sentences in the style of \"Amici miei\"""#;
+        assert_eq!(parse_package_list(quoted, true)[0].description, r#"Generate sentences in the style of "Amici miei""#);
     }
 }

@@ -42,8 +42,8 @@ export function createToolbar(container, actions) {
             ['numbers', 'Lista numerada', actions.numbers],
         ],
         [
-            ['mathInline', 'Matemática no texto ($...$)', actions.mathInline],
-            ['equation', 'Equação numerada', actions.equation],
+            ['mathInline', 'Matemática no texto: envolve a seleção em $...$', actions.mathInline],
+            ['equation', 'Inserir equação com editor visual (Ctrl+Shift+E)', actions.equation, null, 'Equação'],
         ],
         [
             ['figure', 'Inserir figura', actions.figure, null, 'Figura'],

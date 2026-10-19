@@ -275,6 +275,7 @@ function initEditor() {
         keys: [
             { key: 'Mod-b', run: () => { formatting.bold(); return true; } },
             { key: 'Mod-i', run: () => { formatting.italic(); return true; } },
+            { key: 'Mod-Shift-e', run: () => { openEquation(); return true; } },
         ],
     });
 
@@ -827,7 +828,7 @@ const formatting = {
     bullets: () => editor.insertSnippet('\\begin{itemize}\n\t\\item ${}\n\\end{itemize}\n', { block: true }),
     numbers: () => editor.insertSnippet('\\begin{enumerate}\n\t\\item ${}\n\\end{enumerate}\n', { block: true }),
     mathInline: () => editor.wrapSelection('$', '$', 'x'),
-    equation: () => editor.insertSnippet('\\begin{equation}\n\t${}\n\t\\label{eq:${rótulo}}\n\\end{equation}\n', { block: true }),
+    equation: () => openEquation(),
     figure: () => openFigure(),
     table: () => openTable(),
     cite: () => {
@@ -850,7 +851,7 @@ function pathFromMainDir(path) {
 }
 
 /** Garante \usepackage{...} no preâmbulo do arquivo principal, perguntando antes. */
-async function ensurePackages(packages) {
+async function ensurePackages(packages, { ask = true } = {}) {
     if (!mainFile || !packages.length) return;
     const isOpen = mainFile === currentFile;
     const source = isOpen ? editor.getValue() : projectFiles[mainFile].content;
@@ -859,7 +860,7 @@ async function ensurePackages(packages) {
     if (!missing.length) return;
 
     const list = missing.map(p => `\\usepackage{${p}}`).join(', ');
-    if (!confirm(`Para isso funcionar, o documento precisa de ${list}.\n\nAdicionar ao preâmbulo de ${mainFile}?`)) return;
+    if (ask && !confirm(`Para isso funcionar, o documento precisa de ${list}.\n\nAdicionar ao preâmbulo de ${mainFile}?`)) return;
 
     // Depois do último \usepackage (ou do \documentclass)
     const lines = [...source.matchAll(/^\\(?:usepackage|documentclass)\b.*$/gm)];
@@ -912,6 +913,8 @@ function pickImageFromComputer() {
 }
 
 function openFigure(initialProjectPath) {
+    // Guarda a posição do cursor: ao fechar, a janela pode mudar a seleção do editor
+    const range = editor.getSelectionRange();
     const images = Object.keys(projectFiles).filter(p => IMAGE_FILE.test(p)).sort().map(pathFromMainDir);
     openFigureDialog({
         images,
@@ -922,16 +925,49 @@ function openFigure(initialProjectPath) {
             return saved ? pathFromMainDir(saved) : null;
         },
         onInsert: async (code, packages) => {
-            editor.insertText(code + '\n', { block: true });
+            editor.insertText(code + '\n', { block: true, range });
             await ensurePackages(packages);
         },
     });
 }
 
+/** Janela de equação com editor visual (MathLive, carregado sob demanda). */
+async function openEquation() {
+    const range = editor.getSelectionRange();
+    const initialLatex = editor.selectedText().trim().replace(/^\$+|\$+$/g, '');
+    try {
+        const { openEquationDialog } = await import('./equation-dialog.js');
+        // Próximo rótulo livre: equacao-1, equacao-2... (o usuário pode trocar)
+        const used = new Set();
+        for (const file of Object.values(currentFiles())) {
+            if (typeof file.content !== 'string') continue;
+            for (const m of file.content.matchAll(/\\label\{eq:([^}]+)\}/g)) used.add(m[1]);
+        }
+        let n = 1;
+        while (used.has(`equacao-${n}`)) n++;
+
+        openEquationDialog({
+            initialLatex,
+            suggestedLabel: `equacao-${n}`,
+            onInsert: async (code, { block, packages }) => {
+                // No meio do texto: separa da palavra anterior com um espaço
+                const before = editor.charBefore(range.from);
+                const text = !block && before && !/[\s(\[{~]/.test(before) ? ' ' + code : code;
+                editor.insertText(text, { block, range });
+                await ensurePackages(packages);
+            },
+        });
+    } catch (e) {
+        console.error(e);
+        showToast('Não foi possível abrir o editor de equações', 'error');
+    }
+}
+
 function openTable() {
+    const range = editor.getSelectionRange();
     openTableDialog({
         onInsert: async (code, packages) => {
-            editor.insertText(code + '\n', { block: true });
+            editor.insertText(code + '\n', { block: true, range });
             await ensurePackages(packages);
         },
     });
@@ -955,6 +991,8 @@ async function pasteImage(file) {
 function initWritingTools() {
     createToolbar(document.getElementById('editorToolbar'), formatting);
     editor.setCompletionSources(createCompletionSources(() => ({ files: currentFiles(), mainDir: mainDir() })));
+    // Janelas devolvem o foco ao editor preservando o cursor (ver dialogs.js)
+    document.addEventListener('caramelo:focus-editor', () => editor.focus());
     document.getElementById('tabFiles').addEventListener('click', () => showSidebarTab('files'));
     document.getElementById('tabOutline').addEventListener('click', () => showSidebarTab('outline'));
     document.getElementById('wordCount').addEventListener('click', showDetailedWordCount);
@@ -1230,6 +1268,15 @@ function setupEventListeners() {
     themeBtn.addEventListener('click', () => {
         themeBtn.title = cycleTheme();
         showToast(themeBtn.title, 'info');
+    });
+
+    document.getElementById('packagesBtn').addEventListener('click', async () => {
+        const { openPackagesDialog } = await import('./packages-dialog.js');
+        openPackagesDialog({
+            files: currentFiles(),
+            addToPreamble: (packages) => ensurePackages(packages, { ask: false }),
+            toast: showToast,
+        });
     });
 
     document.getElementById('revealProjectBtn').addEventListener('click', () => {

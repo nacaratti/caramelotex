@@ -3,7 +3,7 @@
  * Geram o código LaTeX e o entregam via onInsert(código, pacotesNecessários).
  */
 
-function el(tag, attrs = {}, children = []) {
+export function el(tag, attrs = {}, children = []) {
     const node = document.createElement(tag);
     for (const [key, value] of Object.entries(attrs)) {
         if (key === 'class') node.className = value;
@@ -16,7 +16,7 @@ function el(tag, attrs = {}, children = []) {
     return node;
 }
 
-function field(label, control, hint) {
+export function field(label, control, hint) {
     return el('label', { class: 'block' }, [
         el('span', { class: 'block text-sm font-medium mb-1', text: label }),
         control,
@@ -24,7 +24,7 @@ function field(label, control, hint) {
     ]);
 }
 
-const INPUT_CLASS = 'w-full h-9 px-3 rounded-lg bg-bg border border-line text-sm focus:outline-none focus:border-accent';
+export const INPUT_CLASS = 'w-full h-9 px-3 rounded-lg bg-bg border border-line text-sm focus:outline-none focus:border-accent';
 
 /** Janela modal genérica. Retorna a função que fecha. */
 export function openDialog({ title, body, confirmLabel, onConfirm = () => true, wide = false, cancelLabel = 'Cancelar' }) {
@@ -46,7 +46,13 @@ export function openDialog({ title, body, confirmLabel, onConfirm = () => true, 
     function close() {
         overlay.remove();
         document.removeEventListener('keydown', onKey, true);
-        if (previousFocus && previousFocus.focus) previousFocus.focus();
+        // O editor de código precisa do focus() dele: um focus() comum no
+        // contenteditable põe o cursor no início do documento.
+        if (previousFocus && previousFocus.closest && previousFocus.closest('.cm-editor')) {
+            document.dispatchEvent(new CustomEvent('caramelo:focus-editor'));
+        } else if (previousFocus && previousFocus.focus) {
+            previousFocus.focus();
+        }
     }
     function onKey(event) {
         if (event.key === 'Escape') {

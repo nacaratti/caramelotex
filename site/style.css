@@ -1,0 +1,712 @@
+/* Estilos da landing do CarameloTeX (index.html e sobre.html) */
+
+@font-face {
+    font-family: 'Latin Modern Roman';
+    src: url('fonts/lmroman10-regular.otf') format('opentype');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Latin Modern Roman';
+    src: url('fonts/lmroman10-italic.otf') format('opentype');
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Latin Modern Roman';
+    src: url('fonts/lmroman10-bold.otf') format('opentype');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* Corpo 17pt: desenho próprio para tamanhos grandes (títulos) */
+@font-face {
+    font-family: 'Latin Modern Display';
+    src: url('fonts/lmroman17-regular.otf') format('opentype');
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Latin Modern Mono';
+    src: url('fonts/lmmono10-regular.otf') format('opentype');
+    font-weight: 400;
+    font-display: swap;
+}
+
+:root {
+    /* Cores do mascote */
+    --caramelo: #cd8d45;
+    --caramelo-claro: #f6e3cb;
+    --contorno: #4a2c17;
+    --tinta: #2a1a0e;
+    --papel: #ffffff;
+    --verde: #0e7a73;
+    --verde-escuro: #0a5c56;
+
+    --serif: 'Latin Modern Roman', 'Latin Modern', 'CMU Serif', Georgia, serif;
+    --display: 'Latin Modern Display', var(--serif);
+    --mono: 'Latin Modern Mono', Consolas, monospace;
+
+    /* Escala tipográfica (razão 1,25) */
+    --t-sm: 0.875rem;
+    --t-base: 1.1875rem;
+    --t-lg: 1.5rem;
+    --t-xl: 2rem;
+    --t-2xl: 2.75rem;
+    --t-3xl: clamp(2.5rem, 6vw, 4.25rem);
+
+    --gutter: clamp(1rem, 4vw, 2.5rem);
+    --max: 72rem;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    margin: 0;
+    background: var(--papel);
+    color: var(--tinta);
+    font-family: var(--serif);
+    font-size: var(--t-base);
+    line-height: 1.55;
+    font-kerning: normal;
+    text-rendering: optimizeLegibility;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+a {
+    color: var(--verde-escuro);
+    text-underline-offset: 0.18em;
+}
+
+a:hover {
+    color: var(--verde);
+}
+
+:focus-visible {
+    outline: 3px solid var(--verde);
+    outline-offset: 3px;
+}
+
+.wrap {
+    max-width: var(--max);
+    margin: 0 auto;
+    padding: 0 var(--gutter);
+}
+
+/* ---------- Botões ---------- */
+.button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6em;
+    padding: 0.7em 1.3em;
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 1.125rem;
+    text-decoration: none;
+    color: var(--papel);
+    background: var(--contorno);
+    border: 3px solid var(--contorno);
+    border-radius: 999px;
+    box-shadow: 0 4px 0 var(--tinta);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.button:hover {
+    color: var(--papel);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 0 var(--tinta);
+}
+
+.button:active {
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 var(--tinta);
+}
+
+.button svg {
+    width: 1.2em;
+    height: 1.2em;
+    flex-shrink: 0;
+}
+
+/* ---------- Cabeçalho ---------- */
+.site-header {
+    background: var(--caramelo-claro);
+}
+
+.site-header .wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--tinta);
+    text-decoration: none;
+    font-size: var(--t-lg);
+    font-weight: 700;
+}
+
+.brand img {
+    height: 2.6rem;
+    width: auto;
+}
+
+.site-header nav {
+    display: flex;
+    gap: 1.4rem;
+    font-size: 1.0625rem;
+}
+
+.site-header nav a {
+    color: var(--tinta);
+    text-decoration: none;
+}
+
+.site-header nav a:hover {
+    text-decoration: underline;
+}
+
+/* ---------- Hero ---------- */
+.hero {
+    background: var(--caramelo-claro);
+    padding: 2.5rem 0 0;
+    overflow: hidden;
+}
+
+.hero-text {
+    max-width: 60rem;
+}
+
+.hero h1 {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: var(--t-3xl);
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 1.25rem;
+    color: var(--tinta);
+}
+
+.hero .lead {
+    font-size: 1.3125rem;
+    line-height: 1.5;
+    max-width: 38rem;
+    margin: 0 0 2rem;
+}
+
+.hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem 1.6rem;
+}
+
+.hero-actions .note {
+    font-size: var(--t-sm);
+    font-style: italic;
+    line-height: 1.4;
+}
+
+/* Foto do app no topo, com o cachorro correndo em cima */
+.stage {
+    position: relative;
+    margin-top: 3.5rem;
+}
+
+.stage .dog {
+    position: absolute;
+    right: 4%;
+    top: -7.6rem;
+    width: 12.5rem;
+    z-index: 2;
+}
+
+.shot {
+    margin: 0;
+    border: 3px solid var(--contorno);
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--papel);
+    box-shadow: 0 14px 40px rgba(74, 44, 23, 0.16);
+}
+
+.shot img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.stage .shot {
+    border-bottom: 0;
+    border-radius: 14px 14px 0 0;
+    box-shadow: none;
+}
+
+/* Única animação: a foto sobe ao carregar */
+@media (prefers-reduced-motion: no-preference) {
+    .stage .shot {
+        animation: rise 0.7s ease-out 0.15s both;
+    }
+
+    /* Só movimento: a foto fica visível mesmo se a animação não rodar */
+    @keyframes rise {
+        from {
+            transform: translateY(24px);
+        }
+    }
+}
+
+/* Vitrines: texto ao lado de uma foto do recurso */
+.showcase {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: 2rem 3.5rem;
+    align-items: center;
+}
+
+.showcase.is-reversed {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+
+.showcase.is-reversed .showcase-text {
+    order: 2;
+}
+
+.showcase h3 {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: var(--t-xl);
+    line-height: 1.15;
+    margin: 0 0 0.75rem;
+}
+
+.showcase p {
+    margin: 0;
+}
+
+/* ---------- Seções ---------- */
+section {
+    padding: clamp(3.5rem, 8vw, 6rem) 0;
+}
+
+section h2 {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: var(--t-2xl);
+    line-height: 1.1;
+    margin: 0 0 0.8rem;
+}
+
+.section-intro {
+    max-width: 40rem;
+    margin: 0 0 2.75rem;
+    font-size: 1.25rem;
+}
+
+/* Como instalar: sequência real, então numerada */
+.install {
+    background: var(--caramelo);
+    border-top: 3px solid var(--contorno);
+}
+
+.install a:not(.button) {
+    color: var(--tinta);
+}
+
+.install code {
+    font-family: var(--mono);
+    font-size: 0.95em;
+}
+
+.steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2rem;
+    counter-reset: passo;
+}
+
+.steps li {
+    counter-increment: passo;
+}
+
+.steps li::before {
+    content: counter(passo);
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    margin-bottom: 0.9rem;
+    border: 3px solid var(--contorno);
+    border-radius: 50%;
+    background: var(--papel);
+    font-weight: 700;
+    font-size: 1.2rem;
+}
+
+.steps h3 {
+    font-size: var(--t-lg);
+    line-height: 1.2;
+    margin: 0 0 0.5rem;
+}
+
+.steps p {
+    margin: 0;
+    font-size: 1.0625rem;
+}
+
+.install-footer {
+    margin-top: 3rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem 2rem;
+}
+
+.requirements {
+    margin: 0;
+    font-size: 1.0625rem;
+}
+
+/* Funcionalidades */
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3rem 4rem;
+}
+
+.feature h3 {
+    font-size: var(--t-lg);
+    line-height: 1.25;
+    margin: 0 0 0.5rem;
+}
+
+.feature p {
+    margin: 0;
+    max-width: 34rem;
+}
+
+.feature code,
+.faq code {
+    font-family: var(--mono);
+    font-size: 0.95em;
+    background: var(--caramelo-claro);
+    padding: 0.05em 0.3em;
+    border-radius: 3px;
+}
+
+.feature-wide {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 2rem 4rem;
+    align-items: center;
+    padding-bottom: 3rem;
+    border-bottom: 2px solid var(--caramelo-claro);
+}
+
+.templates-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.templates-list li {
+    border: 2px solid var(--contorno);
+    border-radius: 999px;
+    padding: 0.25rem 0.9rem;
+    font-size: 1rem;
+    background: var(--papel);
+}
+
+/* Perguntas */
+.faq {
+    background: var(--caramelo-claro);
+}
+
+.faq dl {
+    margin: 2.5rem 0 0;
+    max-width: 46rem;
+}
+
+.faq dt {
+    font-weight: 700;
+    font-size: 1.25rem;
+    margin-top: 2rem;
+}
+
+.faq dt:first-child {
+    margin-top: 0;
+}
+
+.faq dd {
+    margin: 0.4rem 0 0;
+}
+
+/* Sobre e histórico de versões */
+.about-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: 3rem 5rem;
+    align-items: start;
+}
+
+.about-text p {
+    margin: 0 0 1.1rem;
+    max-width: 34rem;
+}
+
+/* Página "Sobre": cabeçalho na cor do hero da página inicial */
+.page-head {
+    background: var(--caramelo-claro);
+    padding: 2.5rem 0 3rem;
+}
+
+.page-head h1 {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: var(--t-3xl);
+    line-height: 1.05;
+    margin: 0 0 1rem;
+}
+
+.page-head .lead {
+    font-size: 1.3125rem;
+    max-width: 38rem;
+    margin: 0;
+}
+
+.about h2 {
+    font-size: var(--t-xl);
+    line-height: 1.15;
+    margin: 0 0 1.5rem;
+}
+
+.contact {
+    margin-top: 2.5rem;
+    padding: 1.5rem 1.75rem;
+    border: 3px solid var(--contorno);
+    border-radius: 14px;
+    background: var(--caramelo-claro);
+    max-width: 34rem;
+}
+
+.contact h3 {
+    font-size: var(--t-lg);
+    margin: 0 0 0.5rem;
+}
+
+.contact p {
+    margin: 0 0 1rem;
+}
+
+.contact-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.6rem;
+}
+
+.contact-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+}
+
+.contact-list svg {
+    width: 1.4rem;
+    height: 1.4rem;
+    flex-shrink: 0;
+}
+
+.contact-list a {
+    overflow-wrap: anywhere;
+}
+
+.site-header nav a[aria-current="page"] {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+}
+
+/* Versões em ordem: linha do tempo com a mais nova no topo */
+.timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-left: 3px solid var(--caramelo);
+}
+
+.timeline > li {
+    position: relative;
+    padding: 0 0 2rem 1.75rem;
+}
+
+.timeline > li:last-child {
+    padding-bottom: 0;
+}
+
+.timeline > li::before {
+    content: '';
+    position: absolute;
+    left: -0.6rem;
+    top: 0.35rem;
+    width: 0.9rem;
+    height: 0.9rem;
+    border: 3px solid var(--contorno);
+    border-radius: 50%;
+    background: var(--papel);
+}
+
+.timeline > li.is-next::before {
+    background: var(--caramelo);
+}
+
+.version {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.75rem;
+    margin: 0 0 0.35rem;
+}
+
+.version strong {
+    font-size: var(--t-lg);
+}
+
+.version span {
+    font-size: 1rem;
+    font-style: italic;
+}
+
+.timeline ul,
+.plans {
+    margin: 0;
+    padding-left: 1.2rem;
+    list-style: disc;
+}
+
+.timeline ul li,
+.plans li {
+    margin-bottom: 0.3rem;
+}
+
+.plans-block {
+    margin-top: 3.5rem;
+    padding-top: 2.5rem;
+    border-top: 2px solid var(--caramelo-claro);
+}
+
+.plans-block p {
+    margin: 0 0 1rem;
+}
+
+.plans {
+    columns: 2;
+    column-gap: 4rem;
+}
+
+.plans li {
+    break-inside: avoid;
+}
+
+/* Rodapé */
+.site-footer {
+    background: var(--contorno);
+    color: var(--caramelo-claro);
+    padding: 2.5rem 0;
+    font-size: 1rem;
+}
+
+.site-footer .wrap {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.site-footer a {
+    color: var(--papel);
+}
+
+.footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+}
+
+/* ---------- Responsivo ---------- */
+@media (max-width: 900px) {
+    .steps {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .features-grid,
+    .about-grid,
+    .feature-wide,
+    .showcase,
+    .showcase.is-reversed {
+        grid-template-columns: 1fr;
+    }
+
+    .showcase.is-reversed .showcase-text {
+        order: 0;
+    }
+}
+
+@media (max-width: 640px) {
+    .site-header nav {
+        display: none;
+    }
+
+    .stage {
+        margin-top: 5.5rem;
+    }
+
+    .stage .dog {
+        right: 1rem;
+        width: 8rem;
+        top: -4.8rem;
+    }
+
+    .steps {
+        grid-template-columns: 1fr;
+    }
+
+    .plans {
+        columns: 1;
+    }
+}

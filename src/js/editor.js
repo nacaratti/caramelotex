@@ -300,9 +300,27 @@ export function createEditor(parent, { onChange, onDoubleClick, onPasteImage, ke
             view.focus();
         },
 
-        /** Insere texto puro no lugar da seleção (com `block`, numa linha nova). */
-        insertText(text, { block = false } = {}) {
+        /** Caractere imediatamente antes da posição (ou '' no início). */
+        charBefore(pos) {
+            return pos > 0 ? view.state.sliceDoc(pos - 1, pos) : '';
+        },
+
+        /** Seleção atual, para guardar antes de abrir uma janela. */
+        getSelectionRange() {
             const { from, to } = view.state.selection.main;
+            return { from, to };
+        },
+
+        /**
+         * Insere texto puro no lugar da seleção (com `block`, numa linha nova).
+         * `range` usa uma seleção guardada antes: janelas com campos próprios
+         * (como o MathLive) podem mudar a seleção do editor ao devolver o foco.
+         */
+        insertText(text, { block = false, range = null } = {}) {
+            const docLength = view.state.doc.length;
+            const { from, to } = range
+                ? { from: Math.min(range.from, docLength), to: Math.min(range.to, docLength) }
+                : view.state.selection.main;
             let insert = text;
             if (block) {
                 const line = view.state.doc.lineAt(from);

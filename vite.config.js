@@ -20,7 +20,7 @@ export default defineConfig({
             '@codemirror/state', '@codemirror/view', '@codemirror/commands', '@codemirror/search',
             '@codemirror/autocomplete', '@codemirror/lint', '@codemirror/language',
             '@codemirror/legacy-modes/mode/stex', '@lezer/highlight',
-            'pdfjs-dist', 'pako', 'jszip',
+            'pdfjs-dist', 'pako', 'jszip', 'mathlive',
             '@tauri-apps/api/core', '@tauri-apps/api/event', '@tauri-apps/plugin-dialog',
             '@tauri-apps/plugin-store', '@tauri-apps/plugin-opener',
         ],

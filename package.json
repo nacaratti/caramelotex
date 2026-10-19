@@ -1,7 +1,7 @@
 {
   "name": "caramelotex",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -26,6 +26,7 @@
     "@tauri-apps/plugin-opener": "^2.7.2",
     "@tauri-apps/plugin-store": "^2.5.0",
     "jszip": "3.10.1",
+    "mathlive": "^0.111.1",
     "pako": "2.1.0",
     "pdfjs-dist": "3.11.174"
   },
