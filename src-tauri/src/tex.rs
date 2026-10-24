@@ -349,6 +349,26 @@ pub async fn install_tex_package(app: AppHandle, state: State<'_, AppState>, nam
     .map_err(|e| e.to_string())?
 }
 
+/// Repositórios usados pelo tlmgr (o do TinyTeX e o redirecionador da CTAN).
+const REPOSITORY_HOSTS: [&str; 2] = ["tlnet.yihui.org:443", "mirror.ctan.org:443"];
+
+/// Há conexão com a internet? Tenta abrir uma conexão com os repositórios de
+/// pacotes (até 3 s cada), sem baixar nada.
+#[tauri::command]
+pub async fn has_internet() -> bool {
+    tauri::async_runtime::spawn_blocking(|| {
+        use std::net::{TcpStream, ToSocketAddrs};
+        use std::time::Duration;
+        REPOSITORY_HOSTS.iter().any(|host| {
+            host.to_socket_addrs()
+                .map(|mut addrs| addrs.any(|addr| TcpStream::connect_timeout(&addr, Duration::from_secs(3)).is_ok()))
+                .unwrap_or(false)
+        })
+    })
+    .await
+    .unwrap_or(false)
+}
+
 /// Quais destes arquivos (ex.: "booktabs.sty") a distribuição LaTeX encontra.
 #[tauri::command]
 pub async fn check_tex_files(app: AppHandle, state: State<'_, AppState>, files: Vec<String>) -> Result<Vec<String>, String> {

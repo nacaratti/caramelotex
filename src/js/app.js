@@ -148,9 +148,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     // Setup Resizer
     initResizer();
 
-    // Compila ao abrir, se houver arquivo principal
+    // Compila ao abrir, se houver arquivo principal, depois de instalar os
+    // pacotes que o documento pede e que faltam no LaTeX
     if (mainFile) {
-        setTimeout(() => {
+        setTimeout(async () => {
+            await installMissingPackages().catch(e => console.error(e));
             compile();
         }, 100);
     } else {
@@ -305,6 +307,8 @@ function getEditorContent() {
 // Compila localmente pelo backend (latexmk + TinyTeX/TeX do sistema), lendo os arquivos do disco.
 let isCompiling = false;
 let compileRequestId = 0;
+// A última compilação falhou: a próxima força o latexmk a rodar de novo
+let lastCompileFailed = false;
 
 /** Arquivo .sty/.cls faltando no log ("LaTeX Error: File `x.sty' not found"), ou null. */
 function findMissingFile(log) {
@@ -312,21 +316,86 @@ function findMissingFile(log) {
     return match ? match[1] : null;
 }
 
-async function offerMissingPackage(file) {
-    const install = confirm(
-        `O pacote que fornece "${file}" não está instalado.\n\n` +
-        'Instalar agora? (precisa de internet)'
-    );
-    if (!install) return;
-    showToast(`Instalando o pacote de ${file}...`, 'info');
+// Instalação automática dos pacotes que o documento pede e que faltam no LaTeX.
+let installingPackages = false;
+// Arquivos cuja instalação falhou nesta sessão (sem internet, nome inexistente):
+// não tenta de novo a cada compilação.
+const failedPackageFiles = new Set();
+// Rodadas seguidas de "instalar e recompilar" (um pacote pode puxar outro)
+let installRounds = 0;
+const MAX_INSTALL_ROUNDS = 10;
+// Pacotes do último aviso de "sem internet" (para não repetir a cada compilação)
+let lastOfflineWarning = null;
+
+/**
+ * Procura os pacotes que faltam (os do código e, se houver, o do log) e instala
+ * todos, um por vez. Devolve true se instalou algo.
+ */
+async function installMissingPackages(fromLog = null) {
+    if (installingPackages) return false;
+    installingPackages = true;
+    const compileStatus = document.getElementById('compileStatus');
     try {
-        const pkg = await StorageService.installMissingFile(file);
-        showToast(`Pacote "${pkg}" instalado. Recompilando...`, 'success');
-        compile();
-    } catch (e) {
-        console.error(e);
-        showToast(String(e), 'error');
+        const { findMissingPackages } = await import('./packages-dialog.js');
+        let missing = await findMissingPackages(currentFiles()).catch(() => []);
+        if (fromLog && !missing.some(m => m.file === fromLog)) {
+            missing.unshift({ name: fromLog.replace(/\.[^.]+$/, ''), file: fromLog });
+        }
+        missing = missing.filter(m => !failedPackageFiles.has(m.file));
+        if (!missing.length) return false;
+
+        // Sem internet: avisa (uma vez por conjunto de pacotes) e tenta de novo
+        // na próxima compilação, quando a conexão pode ter voltado
+        compileStatus.textContent = 'Verificando a conexão para instalar pacotes...';
+        if (!(await StorageService.hasInternet())) {
+            const key = missing.map(m => m.file).sort().join(',');
+            if (key !== lastOfflineWarning) {
+                lastOfflineWarning = key;
+                const names = missing.map(m => m.name).join(', ');
+                showToast(`Este documento precisa de pacotes que não estão instalados (${names}). Conecte-se à internet e compile de novo para instalá-los automaticamente.`, 'warning');
+            }
+            compileStatus.textContent = 'Sem internet para instalar pacotes';
+            return false;
+        }
+        lastOfflineWarning = null;
+
+        const installed = [];
+        const failed = [];
+        for (const [index, item] of missing.entries()) {
+            // Um pacote já instalado pode trazer o arquivo seguinte (newtxmath e newtxtext vêm no newtx)
+            const present = await StorageService.checkTexFiles([item.file]).catch(() => []);
+            if (present.length) continue;
+            compileStatus.textContent = `Instalando pacotes (${index + 1} de ${missing.length}): ${item.name}...`;
+            try {
+                installed.push(await StorageService.installMissingFile(item.file));
+            } catch (e) {
+                console.error(e);
+                failed.push(item);
+                failedPackageFiles.add(item.file);
+            }
+        }
+
+        if (failed.length) {
+            const names = failed.map(f => f.name).join(', ');
+            showToast(`Não foi possível instalar: ${names}. O pacote pode não existir no TeX Live; veja a janela Pacotes (ícone da caixa).`, 'error');
+        }
+        if (installed.length) {
+            const unique = [...new Set(installed)];
+            showToast(unique.length === 1 ? `Pacote instalado: ${unique[0]}` : `${unique.length} pacotes instalados: ${unique.join(', ')}`, 'success');
+        }
+        compileStatus.textContent = installed.length ? 'Pacotes instalados' : compileStatus.textContent;
+        return installed.length > 0;
+    } finally {
+        installingPackages = false;
     }
+}
+
+/** Compilação falhou por falta de um arquivo: instala o que faltar e recompila. */
+async function autoInstallAndRecompile(file) {
+    if (installingPackages || installRounds >= MAX_INSTALL_ROUNDS) return;
+    installRounds++;
+    if (await installMissingPackages(file)) compile();
+    else installRounds = 0;
 }
 
 async function compile() {
@@ -353,10 +422,11 @@ async function compile() {
         await saveCurrentProject();
 
         compileStatus.textContent = `Compilando ${mainFile} (${projectEngine})...`;
-        const result = await StorageService.compile(mainFile, projectEngine);
+        const result = await StorageService.compile(mainFile, projectEngine, { force: lastCompileFailed });
 
         // Resultado de uma compilação que já foi substituída por outra
         if (requestId !== compileRequestId || result.cancelled) return;
+        lastCompileFailed = !result.ok;
 
         console.log(`Compilação: ok=${result.ok} em ${result.durationMs}ms (${result.texSource})`);
 
@@ -386,6 +456,7 @@ async function compile() {
         const logEntries = parseLatexLog(result.log);
 
         if (result.ok) {
+            installRounds = 0;
             const warnings = logEntries.filter(e => e.type === 'warning').concat(detectSourceWarnings(projectFiles));
             renderErrorLog(warnings);
             highlightErrors(warnings);
@@ -416,12 +487,20 @@ async function compile() {
         switchViewerMode('logs');
         toggleBtn.dataset.status = 'error';
         toggleBtn.title = 'Erros na compilação — ver detalhes';
-        showToast('Erro na compilação', 'error');
 
+        // Falta um pacote: instala sozinho (ou avisa que precisa de internet)
+        // em vez de mostrar só o erro
         const missing = findMissingFile(result.log);
-        if (missing) offerMissingPackage(missing);
+        if (missing && !failedPackageFiles.has(missing) && installRounds < MAX_INSTALL_ROUNDS) {
+            compileStatus.textContent = `Falta o pacote de ${missing}`;
+            autoInstallAndRecompile(missing);
+        } else {
+            showToast('Erro na compilação', 'error');
+            if (!missing) installRounds = 0;
+        }
     } catch (error) {
         if (requestId !== compileRequestId) return;
+        lastCompileFailed = true;
         console.error('Erro na compilação:', error);
         compileStatus.textContent = 'Erro na compilação';
         renderErrorLog([{ type: 'error', message: String(error), line: null }]);

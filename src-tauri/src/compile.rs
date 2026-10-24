@@ -179,6 +179,7 @@ fn compile_blocking(
     install: TexInstall,
     state: Arc<CompileState>,
     timeout: Duration,
+    force: bool,
 ) -> Result<CompileResult, String> {
     let started = Instant::now();
     let started_at = SystemTime::now();
@@ -220,7 +221,7 @@ fn compile_blocking(
     ];
 
     let end = if install.has_latexmk {
-        let args = vec![
+        let mut args = vec![
             engine_flag(&engine)?.to_string(),
             "-synctex=1".into(),
             "-interaction=nonstopmode".into(),
@@ -228,6 +229,11 @@ fn compile_blocking(
             format!("-outdir={outdir_str}"),
             main_name.clone(),
         ];
+        // Depois de uma falha, o latexmk não roda de novo se nenhum arquivo do
+        // projeto mudou (ex.: só foi instalado um pacote que faltava); -g força.
+        if force {
+            args.insert(0, "-g".into());
+        }
         job.run("latexmk", &args, &main_dir)?
     } else {
         // Sem latexmk (ex.: MiKTeX sem Perl): engine, bibliografia, engine, engine.
@@ -298,6 +304,7 @@ pub async fn compile_project(
     main_file: String,
     engine: String,
     timeout_secs: Option<u64>,
+    force: Option<bool>,
 ) -> Result<CompileResult, String> {
     let root = current_root(&state)?;
     let install = current_install(&app, &state).ok_or(
@@ -311,7 +318,7 @@ pub async fn compile_project(
     let compile_state = Arc::clone(&state.compile);
     let timeout = Duration::from_secs(timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS));
     tauri::async_runtime::spawn_blocking(move || {
-        compile_blocking(root, main_file, engine, install, compile_state, timeout)
+        compile_blocking(root, main_file, engine, install, compile_state, timeout, force.unwrap_or(false))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -385,6 +392,7 @@ mod tests {
             test_install(),
             Arc::new(CompileState::default()),
             timeout,
+            false,
         )
         .unwrap()
     }

@@ -18,23 +18,43 @@ function stripComments(text) {
     return text.split('\n').map(line => line.replace(/(^|[^\\])%.*$/, '$1')).join('\n');
 }
 
-/** Pacotes e classe que o projeto pede: [{ name, file }]. */
+// Nomes de pacote de verdade (descarta argumentos de macro como "styles/#1")
+const VALID_NAME = /^[A-Za-z0-9._-]+$/;
+
+/** Pacotes e classe que o projeto pede (inclusive os .cls/.sty da pasta): [{ name, file, kind }]. */
 function requestedPackages(files) {
     const found = new Map();
     for (const file of Object.values(files)) {
         if (typeof file.content !== 'string') continue;
         const text = stripComments(file.content);
         for (const m of text.matchAll(/\\(?:usepackage|RequirePackage)\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/g)) {
-            for (const name of m[1].split(',').map(s => s.trim()).filter(Boolean)) {
+            for (const name of m[1].split(',').map(s => s.trim()).filter(n => VALID_NAME.test(n))) {
                 found.set(name, { name, file: `${name}.sty`, kind: 'Pacote' });
             }
         }
         for (const m of text.matchAll(/\\documentclass\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/g)) {
             const name = m[1].trim();
-            found.set(`cls:${name}`, { name, file: `${name}.cls`, kind: 'Classe' });
+            if (VALID_NAME.test(name)) found.set(`cls:${name}`, { name, file: `${name}.cls`, kind: 'Classe' });
         }
     }
     return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Nomes dos arquivos que estão na pasta do projeto (ex.: um .cls de revista). */
+function projectFileNames(files) {
+    return new Set(Object.keys(files).map(path => path.split('/').pop()));
+}
+
+/**
+ * Pacotes que o documento pede e que não estão instalados nem na pasta do
+ * projeto: [{ name, file, kind }].
+ */
+export async function findMissingPackages(files) {
+    const local = projectFileNames(files);
+    const requested = requestedPackages(files).filter(r => !local.has(r.file));
+    if (!requested.length) return [];
+    const present = new Set(await StorageService.checkTexFiles(requested.map(r => r.file)));
+    return requested.filter(r => !present.has(r.file));
 }
 
 function chip(text, tone) {
@@ -110,6 +130,7 @@ export function openPackagesDialog({ files, addToPreamble, toast }) {
             return;
         }
         panel.replaceChildren(message('Verificando...'));
+        const local = projectFileNames(files);
         let present;
         try {
             present = new Set(await StorageService.checkTexFiles(requested.map(r => r.file)));
@@ -117,7 +138,7 @@ export function openPackagesDialog({ files, addToPreamble, toast }) {
             panel.replaceChildren(message(String(e), 'error'));
             return;
         }
-        const missing = requested.filter(r => !present.has(r.file)).length;
+        const missing = requested.filter(r => !present.has(r.file) && !local.has(r.file)).length;
         panel.replaceChildren(
             el('p', { class: 'text-sm mb-2', text: missing
                 ? `${missing} de ${requested.length} não ${missing === 1 ? 'está instalado' : 'estão instalados'}. A instalação precisa de internet.`
@@ -125,7 +146,9 @@ export function openPackagesDialog({ files, addToPreamble, toast }) {
             ...requested.map(r => row({
                 name: r.name,
                 description: r.kind === 'Classe' ? 'Classe do documento (\\documentclass)' : null,
-                right: present.has(r.file)
+                right: local.has(r.file)
+                    ? chip('Na pasta do projeto', 'ok')
+                    : present.has(r.file)
                     ? chip('Instalado', 'ok')
                     : [chip('Faltando', 'missing'), installButton(r.name, {
                         viaFile: r.file,

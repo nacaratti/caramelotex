@@ -270,8 +270,8 @@ export const StorageService = {
     /**
      * @returns {Promise<{ok, pdfFile, synctexFile, log, output, engine, texSource, durationMs, cancelled, timedOut}>}
      */
-    compile(mainFile, engine) {
-        return this._invoke('compile_project', { mainFile, engine, timeoutSecs: null });
+    compile(mainFile, engine, { force = false } = {}) {
+        return this._invoke('compile_project', { mainFile, engine, timeoutSecs: null, force });
     },
 
     /** Bytes de um arquivo da pasta de build (PDF ou .synctex.gz). */
@@ -295,6 +295,11 @@ export const StorageService = {
 
     installTexPackage(name) {
         return this._invoke('install_tex_package', { name });
+    },
+
+    /** true se os repositórios de pacotes do LaTeX respondem (há internet). */
+    hasInternet() {
+        return this._invoke('has_internet');
     },
 
     /** Dos arquivos pedidos (ex.: "booktabs.sty"), devolve os que existem. */

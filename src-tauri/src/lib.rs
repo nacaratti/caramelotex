@@ -43,6 +43,7 @@ pub fn run() {
             tex::list_tex_packages,
             tex::install_tex_package,
             tex::check_tex_files,
+            tex::has_internet,
             spell::spell_check,
             spell::spell_suggest,
             spell::spell_add,
