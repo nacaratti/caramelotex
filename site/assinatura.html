@@ -73,11 +73,12 @@
                     funciona sem internet. Não há conta, telemetria nem coleta de uso.</p>
                 <p>O programa se conecta à internet apenas para baixar arquivos, nestes casos:</p>
                 <ul class="connections">
-                    <li><strong>Procura de atualizações:</strong> ao abrir, o CarameloTeX consulta um arquivo de
-                        versões na página de <a href="https://github.com/nacaratti/caramelotex/releases">releases do
-                        GitHub</a> para saber se há uma versão nova. Se houver, mostra um aviso e só baixa a
-                        atualização se o usuário clicar em <em>Reiniciar e atualizar</em>. A procura pode ser
-                        desligada no botão <em>Atualizações</em> da tela inicial.</li>
+                    <li><strong>Aviso de versão nova:</strong> ao abrir, o CarameloTeX consulta a versão mais
+                        recente na página de <a href="https://github.com/nacaratti/caramelotex/releases">releases do
+                        GitHub</a> (pela API pública do GitHub). Se houver uma versão nova, mostra um aviso; nada é
+                        baixado, e o instalador só é baixado, pelo navegador, se o usuário clicar em
+                        <em>Baixar</em>. O aviso pode ser desligado no botão <em>Atualizações</em> da tela
+                        inicial.</li>
                     <li><strong>LaTeX na primeira execução:</strong> o compilador (TinyTeX, cerca de 210 MB) não vem
                         no instalador; é baixado do GitHub uma única vez, na primeira abertura, e conferido por um
                         código de verificação (SHA-256).</li>

@@ -135,8 +135,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     initWritingTools();
     initSpellcheck();
     window.addEventListener('focus', checkExternalChanges);
-    // Antes de instalar uma atualização, grava o que estiver pendente
-    startUpdateCheck({ beforeInstall: () => saveCurrentProject() });
+    startUpdateCheck();
 
     // Rede de segurança: grava o que estiver pendente a cada 30s
     setInterval(() => {

@@ -1,13 +1,11 @@
 /**
- * updater.js - Procura versões novas do CarameloTeX (plugin updater do Tauri)
- * e mostra um aviso no canto da janela para reiniciar e atualizar.
+ * updater.js - Avisa quando há uma versão nova do CarameloTeX.
  *
- * A consulta é um arquivo pequeno (latest.json) na página de releases do
- * GitHub, feita uma vez por sessão e só se a opção estiver ligada. O
- * instalador baixado é conferido pela assinatura do atualizador.
+ * Consulta a release mais recente na API pública do GitHub (uma vez por
+ * sessão, se a opção estiver ligada) e compara com a versão instalada. Se
+ * houver versão nova, mostra um aviso no canto da janela; o botão "Baixar"
+ * abre o download do instalador no navegador, e a pessoa instala quando quiser.
  */
-import { check } from '@tauri-apps/plugin-updater';
-import { relaunch } from '@tauri-apps/plugin-process';
 import { getVersion } from '@tauri-apps/api/app';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { el, openDialog } from './dialogs.js';
@@ -15,7 +13,8 @@ import { el, openDialog } from './dialogs.js';
 const PREF = 'caramelotex.autoUpdate';
 const CHECKED = 'caramelotex.updateChecked';
 const DISMISSED = 'caramelotex.updateDismissed';
-const RELEASES_URL = 'https://github.com/nacaratti/caramelotex/releases';
+const LATEST_API = 'https://api.github.com/repos/nacaratti/caramelotex/releases/latest';
+const INSTALLER = 'CarameloTeX-setup-x64.exe';
 
 function read(storage, key) {
     try {
@@ -39,85 +38,81 @@ export function setAutoUpdate(enabled) {
     write(localStorage, PREF, enabled ? 'on' : 'off');
 }
 
-export function currentVersion() {
-    return getVersion();
+/** "0.3.10" > "0.3.9": compara número a número. */
+function isNewer(candidate, current) {
+    const a = candidate.split('.').map(n => parseInt(n, 10) || 0);
+    const b = current.split('.').map(n => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+    }
+    return false;
 }
 
-/** Consulta o GitHub. Devolve o objeto de atualização ou null. */
+/**
+ * Consulta o GitHub. Devolve { version, notesUrl, downloadUrl } se houver
+ * versão mais nova que a instalada, ou null.
+ */
 export async function findUpdate() {
-    return check({ timeout: 15000 });
+    const response = await fetch(LATEST_API, {
+        headers: { Accept: 'application/vnd.github+json' },
+        signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) throw new Error(`GitHub respondeu ${response.status}`);
+    const release = await response.json();
+    const version = String(release.tag_name || '').replace(/^v/, '');
+    const current = await getVersion();
+    if (!version || !isNewer(version, current)) return null;
+    const asset = (release.assets || []).find(a => a.name === INSTALLER);
+    return {
+        version,
+        notesUrl: release.html_url,
+        downloadUrl: asset ? asset.browser_download_url : release.html_url,
+    };
 }
 
 let card = null;
 
-/**
- * Mostra o aviso de atualização.
- * @param {object} update - resultado do check()
- * @param {() => Promise<void>} [beforeInstall] - ex.: salvar o projeto aberto
- */
-export function showUpdateCard(update, beforeInstall) {
+/** Mostra o aviso de versão nova no canto da janela. */
+export function showUpdateCard(update) {
     card?.remove();
-    const title = el('p', { class: 'update-title', text: 'Atualização disponível' });
-    const text = el('p', { class: 'update-text', text: `A versão ${update.version} do CarameloTeX está pronta para instalar.` });
     const notes = el('button', { class: 'update-link', type: 'button', text: 'Ver novidades' });
-    const progress = el('div', { class: 'update-progress hidden' }, el('div', { class: 'update-progress-bar' }));
-    const install = el('button', { class: 'btn btn-primary', type: 'button', text: 'Reiniciar e atualizar' });
+    const download = el('button', { class: 'btn btn-primary', type: 'button', text: 'Baixar' });
     const later = el('button', { class: 'btn', type: 'button', text: 'Depois' });
-    const actions = el('div', { class: 'update-actions' }, [later, install]);
+    const text = el('p', {
+        class: 'update-text',
+        text: `A versão ${update.version} do CarameloTeX está disponível. Baixe e instale por cima da atual; seus projetos e configurações continuam.`,
+    });
     card = el('div', { class: 'update-card', role: 'status', 'aria-live': 'polite' }, [
         el('div', { class: 'update-icon', 'aria-hidden': 'true' }),
-        el('div', { class: 'update-body' }, [title, text, notes, progress, actions]),
+        el('div', { class: 'update-body' }, [
+            el('p', { class: 'update-title', text: 'Nova versão disponível' }),
+            text,
+            notes,
+            el('div', { class: 'update-actions' }, [later, download]),
+        ]),
     ]);
     card.querySelector('.update-icon').innerHTML =
         '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg>';
 
-    notes.addEventListener('click', () => openUrl(`${RELEASES_URL}/tag/v${update.version}`).catch(() => {}));
-    later.addEventListener('click', () => {
+    const close = () => {
         write(sessionStorage, DISMISSED, update.version);
         card.remove();
         card = null;
-    });
-    install.addEventListener('click', async () => {
-        install.disabled = true;
-        later.disabled = true;
-        notes.classList.add('hidden');
-        progress.classList.remove('hidden');
-        const bar = progress.firstChild;
-        let total = 0;
-        let received = 0;
-        try {
-            if (beforeInstall) await beforeInstall();
-            text.textContent = 'Baixando a atualização...';
-            await update.downloadAndInstall((event) => {
-                if (event.event === 'Started') total = event.data.contentLength || 0;
-                if (event.event === 'Progress') {
-                    received += event.data.chunkLength;
-                    if (total) {
-                        const pct = Math.min(100, Math.round((received / total) * 100));
-                        bar.style.width = `${pct}%`;
-                        text.textContent = `Baixando a atualização... ${pct}%`;
-                    }
-                }
-                if (event.event === 'Finished') text.textContent = 'Instalando e reiniciando...';
-            });
-            // No Windows o instalador fecha o app sozinho; nos outros, reinicia
-            await relaunch();
-        } catch (e) {
-            console.error('Falha na atualização:', e);
-            title.textContent = 'Não foi possível atualizar';
-            text.textContent = 'Verifique a internet e tente de novo, ou baixe a versão nova no site.';
-            progress.classList.add('hidden');
-            install.disabled = false;
-            later.disabled = false;
-            install.textContent = 'Tentar de novo';
-        }
+    };
+    notes.addEventListener('click', () => openUrl(update.notesUrl).catch(() => {}));
+    later.addEventListener('click', close);
+    download.addEventListener('click', () => {
+        openUrl(update.downloadUrl).catch(() => {});
+        text.textContent = 'O download começou no navegador. Quando terminar, feche o CarameloTeX e abra o instalador.';
+        download.remove();
+        later.textContent = 'Fechar';
     });
     document.body.appendChild(card);
 }
 
 /** Janela "Atualizações": versão atual, liga/desliga e "Procurar agora". */
 export async function openUpdateSettings() {
-    const version = await currentVersion().catch(() => '?');
+    const version = await getVersion().catch(() => '?');
     const toggle = el('input', { type: 'checkbox', class: 'mt-1' });
     toggle.checked = autoUpdateEnabled();
     toggle.addEventListener('change', () => setAutoUpdate(toggle.checked));
@@ -151,10 +146,10 @@ export async function openUpdateSettings() {
             el('label', { class: 'flex items-start gap-2 text-sm cursor-pointer' }, [
                 toggle,
                 el('span', {}, [
-                    el('span', { class: 'block font-medium', text: 'Procurar atualizações ao abrir o programa' }),
+                    el('span', { class: 'block font-medium', text: 'Avisar quando houver versão nova' }),
                     el('span', {
                         class: 'block text-xs text-muted',
-                        text: 'O CarameloTeX consulta a página de versões no GitHub. Nenhum dado seu ou dos seus documentos é enviado.',
+                        text: 'Ao abrir, o CarameloTeX consulta a página de versões no GitHub. Nada é baixado sem você pedir, e nenhum dado seu ou dos seus documentos é enviado.',
                     }),
                 ]),
             ]),
@@ -164,10 +159,10 @@ export async function openUpdateSettings() {
 }
 
 /**
- * Procura atualização ao abrir (uma vez por sessão, se a opção estiver
+ * Procura versão nova ao abrir (uma vez por sessão, se a opção estiver
  * ligada) e mostra o aviso. Erros de rede são ignorados em silêncio.
  */
-export async function startUpdateCheck({ beforeInstall } = {}) {
+export async function startUpdateCheck() {
     if (!autoUpdateEnabled() || read(sessionStorage, CHECKED) === 'none') return;
     try {
         const update = await findUpdate();
@@ -177,7 +172,7 @@ export async function startUpdateCheck({ beforeInstall } = {}) {
         }
         write(sessionStorage, CHECKED, update.version);
         if (read(sessionStorage, DISMISSED) === update.version) return;
-        showUpdateCard(update, beforeInstall);
+        showUpdateCard(update);
     } catch (e) {
         console.warn('Não foi possível procurar atualizações:', e);
     }

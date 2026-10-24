@@ -11,8 +11,9 @@ projetos e gera o PDF localmente.
 
 - **Offline:** na primeira abertura o app baixa o LaTeX (cerca de 210 MB) uma
   única vez; depois, escrever e compilar funcionam sem internet.
-- **Atualização automática:** ao abrir, o app procura versões novas e mostra um
-  aviso para reiniciar e atualizar (dá para desligar no botão *Atualizações*).
+- **Aviso de versão nova:** ao abrir, o app consulta a release mais recente no
+  GitHub e, se houver versão nova, mostra um aviso com o link de download (dá para
+  desligar no botão *Atualizações*).
 - **Seus arquivos, suas pastas:** sem conta nem nuvem; o editor salva direto
   na pasta. Arquivos excluídos vão para a Lixeira. Se um arquivo muda fora do
   app (Git, outro editor), ele é recarregado ou o app pergunta qual versão manter.
@@ -102,19 +103,14 @@ CARAMELOTEX_TEX_BIN=".../TinyTeX/bin/windows" cargo test --manifest-path src-tau
    e o histórico em `site/sobre.html`.
 2. Faça o commit e envie uma tag com a mesma versão: `git tag v0.4.0 && git push origin v0.4.0`.
 3. O workflow [`release.yml`](.github/workflows/release.yml) gera o instalador no GitHub
-   Actions, pede a assinatura à SignPath (aprove no painel dela), assina para o
-   atualizador e cria a release como rascunho com **`CarameloTeX-setup-x64.exe`** e
-   **`latest.json`** (nomes fixos: a landing aponta para
-   `releases/latest/download/CarameloTeX-setup-x64.exe` e o app procura atualizações em
-   `releases/latest/download/latest.json`). Revise e publique o rascunho: a partir daí, os
-   apps instalados mostram o aviso de atualização.
+   Actions (sem nenhum secret) e cria a release como rascunho com o arquivo
+   **`CarameloTeX-setup-x64.exe`** (nome fixo: a landing aponta para
+   `releases/latest/download/CarameloTeX-setup-x64.exe`). Revise e publique o rascunho: a
+   partir daí, os apps instalados mostram o aviso de versão nova.
 
-O atualizador usa a chave em `~/.tauri/caramelotex-updater.key` (guarde uma cópia: sem ela
-não dá para publicar atualizações que os apps instalados aceitem), cadastrada nos secrets
-`TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; a chave pública está em
-`src-tauri/tauri.conf.json`. A assinatura do Windows usa o secret `SIGNPATH_API_TOKEN` e as
-variáveis `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG` e `SIGNPATH_SIGNING_POLICY_SLUG`;
-sem elas, o instalador sai sem essa assinatura. A configuração de artefato da SignPath está em
+Opcional: a assinatura do Windows pela SignPath usa o secret `SIGNPATH_API_TOKEN` e as
+variáveis `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG` e
+`SIGNPATH_SIGNING_POLICY_SLUG`; sem eles, o instalador sai sem essa assinatura. A configuração de artefato da SignPath está em
 [`.signpath/artifact-configuration.xml`](.signpath/artifact-configuration.xml), e a política
 de assinatura em `site/assinatura.html` (publicada em `/assinatura`).
 

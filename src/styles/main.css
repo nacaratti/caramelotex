@@ -412,21 +412,6 @@ kbd {
     margin-top: 0.25rem;
 }
 
-.update-progress {
-    height: 0.3rem;
-    margin-top: 0.6rem;
-    border-radius: 999px;
-    background: var(--border);
-    overflow: hidden;
-}
-
-.update-progress-bar {
-    height: 100%;
-    width: 0;
-    background: var(--accent);
-    transition: width 0.2s;
-}
-
 .update-actions {
     display: flex;
     justify-content: flex-end;
