@@ -1,0 +1,53 @@
+# Monta o LaTeX (TinyTeX) que o CarameloTeX baixa na primeira execução e o
+# publica numa release própria (tinytex-<versão>), fora do instalador.
+#
+# Rode manualmente (aba Actions > TinyTeX > Run workflow) depois de mudar a
+# lista de pacotes ou a versão em scripts/build-tinytex.ps1. No fim, o log
+# mostra o tamanho e o SHA-256: copie para TINYTEX_RELEASE, TINYTEX_URL,
+# TINYTEX_SIZE e TINYTEX_SHA256 em src-tauri/src/tex.rs.
+name: TinyTeX
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Montar TinyTeX
+        shell: powershell
+        run: ./scripts/build-tinytex.ps1
+
+      - name: Publicar na release tinytex-<versão>
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = 'src-tauri/resources/tinytex.zip'
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
+          $entry = $archive.GetEntry('TinyTeX/.caramelotex-version')
+          $reader = New-Object IO.StreamReader($entry.Open())
+          $version = $reader.ReadToEnd().Trim()
+          $reader.Close(); $archive.Dispose()
+
+          $tag = "tinytex-$version"
+          $name = "$tag.zip"
+          Copy-Item $zip $name
+          $exists = gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) { throw "A release $tag já existe; aumente o BundleRevision no script." }
+          gh release create $tag $name --title "LaTeX do CarameloTeX ($version)" `
+            --notes 'TinyTeX baixado pelo CarameloTeX na primeira execução. Não é o instalador do programa.' --latest=false
+
+          $hash = (Get-FileHash $name -Algorithm SHA256).Hash.ToLower()
+          $size = (Get-Item $name).Length
+          "TINYTEX_RELEASE = $version"
+          "TINYTEX_URL     = https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/$name"
+          "TINYTEX_SIZE    = $size"
+          "TINYTEX_SHA256  = $hash"

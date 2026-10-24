@@ -1,7 +1,7 @@
 //! Localiza a distribuição LaTeX usada para compilar.
 //!
-//! Ordem: pasta configurada pelo usuário → TinyTeX embutido (extraído de
-//! `resources/tinytex.zip` para a pasta de dados do app na 1ª execução) →
+//! Ordem: pasta configurada pelo usuário → TinyTeX do app (baixado da release
+//! `tinytex-*` do GitHub e extraído para a pasta de dados na 1ª execução) →
 //! TeX do sistema no PATH (MiKTeX / TeX Live).
 
 use std::fs;
@@ -15,7 +15,6 @@ use crate::AppState;
 
 const EXE: &str = if cfg!(windows) { ".exe" } else { "" };
 const TINYTEX_DIR: &str = "TinyTeX";
-const TINYTEX_ZIP: &str = "resources/tinytex.zip";
 const VERSION_FILE: &str = ".caramelotex-version";
 
 #[derive(Clone, Serialize)]
@@ -40,8 +39,10 @@ impl TexInstall {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SetupProgress {
-    done: usize,
-    total: usize,
+    /// "download", "verify" ou "extract"
+    phase: String,
+    done: u64,
+    total: u64,
 }
 
 fn install_from_bin_dir(bin_dir: PathBuf, source: &str) -> Option<TexInstall> {
@@ -81,42 +82,127 @@ fn find_in_path() -> Option<TexInstall> {
     std::env::split_paths(&path).find_map(|dir| install_from_bin_dir(dir, "system"))
 }
 
-/// Extrai o TinyTeX embutido, se ele vier no instalador e ainda não tiver sido extraído.
-/// Extrai para uma pasta temporária e renomeia no fim, para nunca deixar uma instalação pela metade.
-/// Versão gravada pelo scripts/build-tinytex.ps1 dentro do zip (ex.: "2026.10-r2").
-fn zip_version(zip_path: &Path) -> Option<String> {
-    let file = fs::File::open(zip_path).ok()?;
-    let mut archive = zip::ZipArchive::new(file).ok()?;
-    let mut entry = archive.by_name(&format!("{TINYTEX_DIR}/{VERSION_FILE}")).ok()?;
-    let mut version = String::new();
-    io::Read::read_to_string(&mut entry, &mut version).ok()?;
-    Some(version.trim().to_string())
-}
+/// Versão do TinyTeX que o app usa (marca gravada pelo scripts/build-tinytex.ps1
+/// dentro do zip). Ao mudar, o app baixa e extrai o novo zip.
+const TINYTEX_RELEASE: &str = "2026.10-r2";
+/// O zip fica numa release própria do GitHub, fora do instalador.
+const TINYTEX_URL: &str =
+    "https://github.com/nacaratti/caramelotex/releases/download/tinytex-2026.10-r2/tinytex-2026.10-r2.zip";
+const TINYTEX_SIZE: u64 = 222_735_063;
+const TINYTEX_SHA256: &str = "86f71c5a8f98e4affe629f06a4dc6b039f86be8493d2669dcac6c0b73c9be967";
 
 fn installed_version(target: &Path) -> Option<String> {
     fs::read_to_string(target.join(VERSION_FILE)).ok().map(|v| v.trim().to_string())
 }
 
-fn extract_bundled(app: &AppHandle) -> Result<bool, String> {
-    let Some(target) = bundled_root(app) else { return Ok(false) };
-    let zip_path = match app.path().resolve(TINYTEX_ZIP, tauri::path::BaseDirectory::Resource) {
-        Ok(p) if p.is_file() => p,
-        _ => return Ok(false),
-    };
-    // Reextrai quando o instalador traz uma versão diferente da instalada
-    // (ex.: atualização do app com pacotes novos). Zips sem versão (v0.1) só
-    // são extraídos na primeira vez.
-    let wanted = zip_version(&zip_path);
-    if target.exists() && (wanted.is_none() || installed_version(&target) == wanted) {
-        return Ok(false);
-    }
+/// SHA-256 do arquivo, em hexadecimal.
+fn sha256_of(path: &Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut hasher = Sha256::new();
+    io::copy(&mut file, &mut hasher).map_err(|e| e.to_string())?;
+    Ok(hasher.finalize().iter().map(|b| format!("{b:02x}")).collect())
+}
 
-    let parent = target.parent().ok_or("Pasta de dados inválida")?;
+fn emit_progress(app: &AppHandle, phase: &str, done: u64, total: u64) {
+    let _ = app.emit("tex-setup-progress", SetupProgress { phase: phase.into(), done, total });
+}
+
+/// Baixa o zip do TinyTeX (com o curl do Windows) mostrando o progresso pelo
+/// tamanho do arquivo, e confere o SHA-256 no fim.
+fn download_tinytex(dir: &Path, progress: impl Fn(&str, u64, u64)) -> Result<PathBuf, String> {
+    let zip = dir.join("tinytex-download.zip");
+    let part = dir.join("tinytex-download.zip.part");
+    let _ = fs::remove_file(&part);
+    fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+
+    let curl = if cfg!(windows) {
+        std::env::var_os("SystemRoot")
+            .map(|root| PathBuf::from(root).join("System32").join("curl.exe"))
+            .filter(|p| p.is_file())
+            .unwrap_or_else(|| PathBuf::from("curl.exe"))
+    } else {
+        PathBuf::from("curl")
+    };
+    let mut cmd = std::process::Command::new(curl);
+    // --speed-limit/--speed-time: desiste se a conexão parar por 60 s
+    cmd.args(["-fsSL", "--retry", "3", "--retry-delay", "5", "--speed-limit", "1024", "--speed-time", "60", "-o"])
+        .arg(&part)
+        .arg(TINYTEX_URL)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let mut child = cmd.spawn().map_err(|e| format!("Não foi possível iniciar o download do LaTeX: {e}"))?;
+    let status = loop {
+        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+            break status;
+        }
+        let done = fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
+        progress("download", done.min(TINYTEX_SIZE), TINYTEX_SIZE);
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    };
+    if !status.success() {
+        let mut err = String::new();
+        if let Some(mut stderr) = child.stderr.take() {
+            let _ = io::Read::read_to_string(&mut stderr, &mut err);
+        }
+        let _ = fs::remove_file(&part);
+        return Err(format!(
+            "Não foi possível baixar o LaTeX (cerca de 210 MB). Na primeira vez, o CarameloTeX precisa de internet para baixá-lo; depois funciona sem conexão.\n\n{}",
+            err.trim()
+        ));
+    }
+    progress("verify", TINYTEX_SIZE, TINYTEX_SIZE);
+    let hash = sha256_of(&part)?;
+    if hash != TINYTEX_SHA256 {
+        let _ = fs::remove_file(&part);
+        return Err("O download do LaTeX veio corrompido. Tente de novo.".into());
+    }
+    let _ = fs::remove_file(&zip);
+    fs::rename(&part, &zip).map_err(|e| e.to_string())?;
+    Ok(zip)
+}
+
+/// Garante o TinyTeX na pasta de dados do app: usa o zip local indicado em
+/// CARAMELOTEX_TINYTEX_ZIP (desenvolvimento) ou baixa o da release. Só baixa
+/// quando não há TinyTeX ou quando a versão instalada é outra.
+fn ensure_tinytex(app: &AppHandle) -> Result<bool, String> {
+    let Some(target) = bundled_root(app) else { return Ok(false) };
+    if target.exists() {
+        match installed_version(&target) {
+            Some(v) if v == TINYTEX_RELEASE => return Ok(false),
+            // TinyTeX sem marca (instalado pela v0.1): mantém
+            None => return Ok(false),
+            Some(_) => {}
+        }
+    }
+    let parent = target.parent().ok_or("Pasta de dados inválida")?.to_path_buf();
+
+    let local = std::env::var_os("CARAMELOTEX_TINYTEX_ZIP").map(PathBuf::from).filter(|p| p.is_file());
+    let (zip_path, downloaded) = match local {
+        Some(path) => (path, false),
+        None => (download_tinytex(&parent, |phase, done, total| emit_progress(app, phase, done, total))?, true),
+    };
+    let result = extract_tinytex(app, &zip_path, &target, &parent);
+    if downloaded {
+        let _ = fs::remove_file(&zip_path);
+    }
+    result.map(|_| true)
+}
+
+/// Extrai para uma pasta temporária e renomeia no fim, para nunca deixar uma
+/// instalação pela metade.
+fn extract_tinytex(app: &AppHandle, zip_path: &Path, target: &Path, parent: &Path) -> Result<(), String> {
     let partial = parent.join(format!("{TINYTEX_DIR}.partial"));
     let _ = fs::remove_dir_all(&partial);
     fs::create_dir_all(&partial).map_err(|e| format!("Erro ao preparar o TinyTeX: {e}"))?;
 
-    let file = fs::File::open(&zip_path).map_err(|e| format!("Erro ao abrir o TinyTeX: {e}"))?;
+    let file = fs::File::open(zip_path).map_err(|e| format!("Erro ao abrir o TinyTeX: {e}"))?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("TinyTeX corrompido: {e}"))?;
     let total = archive.len();
 
@@ -135,7 +221,7 @@ fn extract_bundled(app: &AppHandle) -> Result<bool, String> {
             io::copy(&mut entry, &mut dest).map_err(|e| format!("Erro ao extrair o TinyTeX: {e}"))?;
         }
         if i % 200 == 0 || i + 1 == total {
-            let _ = app.emit("tex-setup-progress", SetupProgress { done: i + 1, total });
+            emit_progress(app, "extract", (i + 1) as u64, total as u64);
         }
     }
 
@@ -147,12 +233,12 @@ fn extract_bundled(app: &AppHandle) -> Result<bool, String> {
     let old = parent.join(format!("{TINYTEX_DIR}.old"));
     if target.exists() {
         let _ = fs::remove_dir_all(&old);
-        fs::rename(&target, &old).map_err(|e| format!("Erro ao atualizar o TinyTeX (feche outros programas que usem o LaTeX): {e}"))?;
+        fs::rename(target, &old).map_err(|e| format!("Erro ao atualizar o TinyTeX (feche outros programas que usem o LaTeX): {e}"))?;
     }
-    fs::rename(&source, &target).map_err(|e| format!("Erro ao instalar o TinyTeX: {e}"))?;
+    fs::rename(&source, target).map_err(|e| format!("Erro ao instalar o TinyTeX: {e}"))?;
     let _ = fs::remove_dir_all(&partial);
     let _ = fs::remove_dir_all(&old);
-    Ok(true)
+    Ok(())
 }
 
 fn detect(app: &AppHandle, custom_bin_dir: Option<&str>) -> Option<TexInstall> {
@@ -174,8 +260,13 @@ pub async fn prepare_tex(
 ) -> Result<Option<TexInstall>, String> {
     let app_for_task = app.clone();
     let found = tauri::async_runtime::spawn_blocking(move || -> Result<Option<TexInstall>, String> {
-        extract_bundled(&app_for_task)?;
-        Ok(detect(&app_for_task, custom_bin_dir.as_deref()))
+        // Sem internet na 1ª vez, ainda dá para usar um MiKTeX/TeX Live instalado
+        let prepared = ensure_tinytex(&app_for_task);
+        match (detect(&app_for_task, custom_bin_dir.as_deref()), prepared) {
+            (Some(found), _) => Ok(Some(found)),
+            (None, Err(e)) => Err(e),
+            (None, Ok(_)) => Ok(None),
+        }
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -204,8 +295,72 @@ fn has_tlmgr(install: &TexInstall) -> bool {
     tlmgr_perl(install).is_some() || tlmgr_path(install).is_file()
 }
 
+/// Mensagem do tlmgr quando o repositório traz uma versão nova do próprio tlmgr:
+/// enquanto ele não se atualizar, recusa qualquer instalação.
+const SELF_UPDATE_NEEDED: &str = "tlmgr itself needs to be updated";
+
 /// Roda o tlmgr sem abrir janela de console e devolve (sucesso, saída padrão, erros).
+/// Se o tlmgr pedir para ser atualizado, atualiza e tenta de novo uma vez.
 fn run_tlmgr_split(install: &TexInstall, args: &[&str]) -> Result<(bool, String, String), String> {
+    let (ok, out, err) = run_tlmgr_once(install, args)?;
+    let needs_update = !ok && (out.contains(SELF_UPDATE_NEEDED) || err.contains(SELF_UPDATE_NEEDED));
+    if !needs_update || args.first() == Some(&"update") {
+        return Ok((ok, out, err));
+    }
+    self_update_tlmgr(install)?;
+    run_tlmgr_once(install, args)
+}
+
+/// `tlmgr update --self`. No Windows o tlmgr só prepara a atualização e deixa
+/// o script temp/updater-w32, que o tlmgr.bat rodaria ao terminar; como o app
+/// chama o tlmgr.pl direto, roda o script aqui.
+fn self_update_tlmgr(install: &TexInstall) -> Result<(), String> {
+    let _only_one = SELF_UPDATE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let (ok, out, err) = run_tlmgr_once(install, &["update", "--self"])?;
+    if !ok {
+        return Err(format!("Não foi possível atualizar o tlmgr:\n{out}{err}"));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let Some(root) = install.bin_dir.parent().and_then(Path::parent) else { return Ok(()) };
+        let temp = root.join("temp");
+        let pending = temp.join("updater-w32");
+        if !pending.is_file() {
+            return Ok(());
+        }
+        // O tlmgr.bat renomeia antes de rodar, para o script valer uma vez só
+        let script = temp.join("updater-w32.bat");
+        let _ = fs::remove_file(&script);
+        fs::rename(&pending, &script).map_err(|e| format!("Erro ao preparar a atualização do tlmgr: {e}"))?;
+        // O script roda o tlmgr.pl, que precisa da pasta bin no PATH para se achar
+        let mut paths = vec![install.bin_dir.clone()];
+        if let Some(existing) = std::env::var_os("PATH") {
+            paths.extend(std::env::split_paths(&existing));
+        }
+        let path_env = std::env::join_paths(paths).map_err(|e| e.to_string())?;
+        let _queue = TLMGR_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let status = std::process::Command::new("cmd.exe")
+            .args(["/d", "/c"])
+            .arg(&script)
+            .current_dir(&temp)
+            .env("PATH", path_env)
+            .stdin(std::process::Stdio::null())
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+            .status()
+            .map_err(|e| format!("Não foi possível atualizar o tlmgr: {e}"))?;
+        if !status.success() {
+            let log = fs::read_to_string(temp.join("update-self.log")).unwrap_or_default();
+            return Err(format!("A atualização do tlmgr falhou:\n{log}"));
+        }
+    }
+    Ok(())
+}
+
+/// Uma atualização do próprio tlmgr por vez (várias instalações podem pedir juntas).
+static SELF_UPDATE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn run_tlmgr_once(install: &TexInstall, args: &[&str]) -> Result<(bool, String, String), String> {
     let mut cmd = match tlmgr_perl(install) {
         Some((perl, script)) => {
             let mut c = std::process::Command::new(perl);
@@ -220,19 +375,59 @@ fn run_tlmgr_split(install: &TexInstall, args: &[&str]) -> Result<(bool, String,
     }
     cmd.args(args)
         .env("PATH", std::env::join_paths(paths).map_err(|e| e.to_string())?)
-        .stdin(std::process::Stdio::null());
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
-    let out = cmd.output().map_err(|e| format!("Não foi possível executar o tlmgr: {e}"))?;
-    Ok((
-        out.status.success(),
-        String::from_utf8_lossy(&out.stdout).into_owned(),
-        String::from_utf8_lossy(&out.stderr).into_owned(),
-    ))
+
+    // O tlmgr não aceita duas operações ao mesmo tempo na mesma instalação
+    // (ex.: a instalação automática e um clique na janela Pacotes): uma por vez.
+    let _queue = TLMGR_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+    let mut child = cmd.spawn().map_err(|e| format!("Não foi possível executar o tlmgr: {e}"))?;
+    let read_all = |mut pipe: Box<dyn io::Read + Send>| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = pipe.read_to_end(&mut buf);
+            buf
+        })
+    };
+    let stdout = read_all(Box::new(child.stdout.take().ok_or("Saída do tlmgr indisponível")?));
+    let stderr = read_all(Box::new(child.stderr.take().ok_or("Saída do tlmgr indisponível")?));
+
+    // Sem limite, uma conexão que cai no meio do download deixa a instalação
+    // parada para sempre.
+    let deadline = std::time::Instant::now() + TLMGR_TIMEOUT;
+    let status = loop {
+        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+            break Some(status);
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    };
+    let out = String::from_utf8_lossy(&stdout.join().unwrap_or_default()).into_owned();
+    let err = String::from_utf8_lossy(&stderr.join().unwrap_or_default()).into_owned();
+    match status {
+        Some(status) => Ok((status.success(), out, err)),
+        None => Err(format!(
+            "O tlmgr passou de {} minutos e foi interrompido. Verifique a internet e tente de novo.",
+            TLMGR_TIMEOUT.as_secs() / 60
+        )),
+    }
 }
+
+/// Fila das operações do tlmgr (uma por vez).
+static TLMGR_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+/// Tempo máximo de uma operação do tlmgr (pacotes grandes levam alguns minutos).
+const TLMGR_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(600);
 
 /// Como `run_tlmgr_split`, com a saída e os erros juntos.
 fn run_tlmgr(install: &TexInstall, args: &[&str]) -> Result<(bool, String), String> {
@@ -504,6 +699,32 @@ pub fn current_install(app: &AppHandle, state: &AppState) -> Option<TexInstall> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Baixa de verdade o zip do TinyTeX da release (cerca de 210 MB) para uma
+    /// pasta temporária e confere tamanho, SHA-256 e a marca de versão.
+    #[test]
+    #[ignore = "baixa 210 MB da internet"]
+    fn downloads_tinytex_release() {
+        let dir = std::env::temp_dir().join("caramelotex-tinytex-download-test");
+        let _ = fs::remove_dir_all(&dir);
+        let phases = std::sync::Mutex::new(Vec::new());
+        let zip = download_tinytex(&dir, |phase, done, total| {
+            let mut seen = phases.lock().unwrap();
+            if seen.last() != Some(&phase.to_string()) {
+                seen.push(phase.to_string());
+            }
+            assert!(done <= total);
+        })
+        .expect("download");
+        assert_eq!(fs::metadata(&zip).unwrap().len(), TINYTEX_SIZE);
+        assert_eq!(sha256_of(&zip).unwrap(), TINYTEX_SHA256);
+        let mut archive = zip::ZipArchive::new(fs::File::open(&zip).unwrap()).unwrap();
+        let mut marker = String::new();
+        io::Read::read_to_string(&mut archive.by_name(&format!("{TINYTEX_DIR}/{VERSION_FILE}")).unwrap(), &mut marker).unwrap();
+        assert_eq!(marker.trim(), TINYTEX_RELEASE);
+        assert_eq!(*phases.lock().unwrap(), ["download", "verify"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn finds_package_in_tlmgr_search() {

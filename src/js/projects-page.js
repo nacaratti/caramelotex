@@ -5,12 +5,14 @@ import './theme.js';
 import { StorageService } from './storage.js';
 import { escapeHtml, showToast } from './ui.js';
 import { cycleTheme, themeLabel } from './theme.js';
+import { startUpdateCheck, openUpdateSettings } from './updater.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     const themeBtn = document.getElementById('themeBtn');
     themeBtn.title = themeLabel();
     themeBtn.addEventListener('click', () => { themeBtn.title = cycleTheme(); });
 
+    document.getElementById('updatesBtn').addEventListener('click', openUpdateSettings);
     document.getElementById('openFolderBtn').addEventListener('click', openFolder);
     document.getElementById('importZipBtn').addEventListener('click', () => document.getElementById('zipInput').click());
     document.getElementById('zipInput').addEventListener('change', (e) => {
@@ -18,30 +20,66 @@ document.addEventListener('DOMContentLoaded', async () => {
         e.target.value = '';
     });
 
+    document.getElementById('setupRetry').addEventListener('click', prepareTex);
+    document.getElementById('setupSkip').addEventListener('click', () => {
+        document.getElementById('setupOverlay').classList.add('hidden');
+    });
+
     await renderProjects();
     await prepareTex();
+    startUpdateCheck();
 });
 
+const SETUP_PHASES = {
+    download: 'Baixando o LaTeX',
+    verify: 'Conferindo o download',
+    extract: 'Instalando o LaTeX',
+};
+
+/**
+ * Na primeira execução, baixa e instala o LaTeX (TinyTeX) com progresso. Sem
+ * internet, explica e oferece tentar de novo; nas demais, é instantâneo.
+ */
 async function prepareTex() {
     const status = document.getElementById('texStatus');
     const overlay = document.getElementById('setupOverlay');
+    const title = document.getElementById('setupTitle');
+    const detail = document.getElementById('setupDetail');
     const bar = document.getElementById('setupProgress');
+    const barBox = document.getElementById('setupBar');
+    const numbers = document.getElementById('setupNumbers');
+    const actions = document.getElementById('setupActions');
+    const mb = (bytes) => Math.round(bytes / 1048576).toLocaleString('pt-BR');
+
+    title.textContent = 'Preparando o LaTeX pela primeira vez';
+    barBox.classList.remove('hidden');
+    actions.classList.add('hidden');
+    bar.style.width = '0%';
+    numbers.textContent = '';
     try {
-        const tex = await StorageService.prepareTex((done, total) => {
+        const tex = await StorageService.prepareTex((phase, done, total) => {
             overlay.classList.remove('hidden');
-            bar.style.width = `${Math.round((done / total) * 100)}%`;
+            title.textContent = SETUP_PHASES[phase] || 'Preparando o LaTeX';
+            bar.style.width = `${Math.round((done / Math.max(total, 1)) * 100)}%`;
+            numbers.textContent = phase === 'download' ? `${mb(done)} de ${mb(total)} MB` : '';
         });
-        const labels = { bundled: 'LaTeX embutido (TinyTeX)', system: 'LaTeX do sistema', custom: 'LaTeX configurado' };
+        overlay.classList.add('hidden');
+        const labels = { bundled: 'LaTeX do CarameloTeX (TinyTeX)', system: 'LaTeX do sistema', custom: 'LaTeX configurado' };
         status.textContent = tex ? labels[tex.source] || tex.source : 'Nenhum LaTeX encontrado';
         status.className = tex ? 'text-xs text-muted' : 'text-xs text-danger';
-        status.title = tex ? tex.binDir : 'Reinstale o CarameloTeX ou instale o MiKTeX/TeX Live.';
+        status.title = tex ? tex.binDir : 'Conecte-se à internet e reabra o CarameloTeX para baixar o LaTeX.';
     } catch (e) {
-        status.textContent = 'Erro ao preparar o LaTeX';
+        console.error(e);
+        // Sem internet na 1ª vez: explica, e a pessoa pode tentar de novo ou seguir sem compilar
+        overlay.classList.remove('hidden');
+        title.textContent = 'Não foi possível baixar o LaTeX';
+        detail.textContent = String(e).split('\n')[0];
+        barBox.classList.add('hidden');
+        numbers.textContent = '';
+        actions.classList.remove('hidden');
+        status.textContent = 'LaTeX não instalado';
         status.className = 'text-xs text-danger';
         status.title = String(e);
-        console.error(e);
-    } finally {
-        overlay.classList.add('hidden');
     }
 }
 

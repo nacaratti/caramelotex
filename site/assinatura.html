@@ -68,13 +68,29 @@
                 <p>Todos os membros usam autenticação em duas etapas no GitHub e na SignPath.</p>
 
                 <h2>Privacidade</h2>
-                <p>Este programa não transfere nenhuma informação para outros sistemas em rede, a menos que o usuário
-                    peça especificamente. Os documentos ficam nas pastas escolhidas pelo usuário, o PDF é gerado no
-                    computador e o corretor ortográfico funciona sem internet.</p>
-                <p>A única conexão acontece quando o usuário pede para instalar ou buscar um pacote LaTeX: o
-                    gerenciador do TeX Live (<code>tlmgr</code>) baixa a lista e os pacotes de um espelho da
-                    <a href="https://ctan.org">CTAN</a>. Nessa conexão, o espelho recebe apenas o pedido de download,
-                    como acontece em qualquer download pela internet.</p>
+                <p>Este programa não envia os seus documentos nem dados pessoais para nenhum sistema. Os arquivos
+                    ficam nas pastas escolhidas pelo usuário, o PDF é gerado no computador e o corretor ortográfico
+                    funciona sem internet. Não há conta, telemetria nem coleta de uso.</p>
+                <p>O programa se conecta à internet apenas para baixar arquivos, nestes casos:</p>
+                <ul class="connections">
+                    <li><strong>Procura de atualizações:</strong> ao abrir, o CarameloTeX consulta um arquivo de
+                        versões na página de <a href="https://github.com/nacaratti/caramelotex/releases">releases do
+                        GitHub</a> para saber se há uma versão nova. Se houver, mostra um aviso e só baixa a
+                        atualização se o usuário clicar em <em>Reiniciar e atualizar</em>. A procura pode ser
+                        desligada no botão <em>Atualizações</em> da tela inicial.</li>
+                    <li><strong>LaTeX na primeira execução:</strong> o compilador (TinyTeX, cerca de 210 MB) não vem
+                        no instalador; é baixado do GitHub uma única vez, na primeira abertura, e conferido por um
+                        código de verificação (SHA-256).</li>
+                    <li><strong>Pacotes do LaTeX:</strong> quando um documento usa um pacote que não está instalado,
+                        ou quando o usuário busca e instala um pacote na janela <em>Pacotes</em>, o gerenciador do
+                        TeX Live (<code>tlmgr</code>) baixa o pacote de um espelho da
+                        <a href="https://ctan.org">CTAN</a>.</li>
+                </ul>
+                <p>Em todas essas conexões, o servidor recebe apenas o pedido de download, como em qualquer
+                    download pela internet (incluindo o endereço IP de quem faz o pedido). As políticas de
+                    privacidade desses serviços estão em
+                    <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub</a>
+                    e <a href="https://ctan.org/privacy">CTAN</a>.</p>
 
                 <h2>Contato</h2>
                 <p>Para relatar um problema com a assinatura ou com o instalador, escreva para

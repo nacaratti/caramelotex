@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Permissões da janela principal",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:default", "store:default", "opener:default"]
+  "permissions": ["core:default", "dialog:default", "store:default", "opener:default", "updater:default", "process:allow-restart"]
 }

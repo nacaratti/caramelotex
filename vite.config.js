@@ -22,7 +22,8 @@ export default defineConfig({
             '@codemirror/legacy-modes/mode/stex', '@lezer/highlight',
             'pdfjs-dist', 'pako', 'jszip', 'mathlive',
             '@tauri-apps/api/core', '@tauri-apps/api/event', '@tauri-apps/plugin-dialog',
-            '@tauri-apps/plugin-store', '@tauri-apps/plugin-opener',
+            '@tauri-apps/plugin-store', '@tauri-apps/plugin-opener', '@tauri-apps/api/app',
+            '@tauri-apps/plugin-updater', '@tauri-apps/plugin-process',
         ],
     },
     build: {

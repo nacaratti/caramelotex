@@ -12,6 +12,7 @@ import { openFigureDialog, openTableDialog, openWordCountDialog, parseTexcount }
 import { createCompletionSources } from './completions.js';
 import { buildOutline, countWords } from './outline.js';
 import { spellChecker, spellTheme } from './spell.js';
+import { startUpdateCheck } from './updater.js';
 import { escapeHtml, showToast } from './ui.js';
 import { cycleTheme, themeLabel } from './theme.js';
 
@@ -134,6 +135,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     initWritingTools();
     initSpellcheck();
     window.addEventListener('focus', checkExternalChanges);
+    // Antes de instalar uma atualização, grava o que estiver pendente
+    startUpdateCheck({ beforeInstall: () => saveCurrentProject() });
 
     // Rede de segurança: grava o que estiver pendente a cada 30s
     setInterval(() => {
@@ -1197,35 +1200,106 @@ function showSpellMenu(event, items) {
     menu.classList.remove('hidden');
 }
 
-function setSpellcheck(enabled) {
-    if (!spellExtensions) {
-        spellExtensions = [
+const SPELL_LANGUAGES = {
+    'pt-BR': { label: 'Português (Brasil)', short: 'Português' },
+    'en-US': { label: 'Inglês (EUA)', short: 'Inglês' },
+};
+let spellLanguage = 'off';
+
+// Idioma do babel/polyglossia -> dicionário
+const BABEL_LANGUAGES = {
+    english: 'en-US', american: 'en-US', USenglish: 'en-US', british: 'en-US', UKenglish: 'en-US',
+    brazil: 'pt-BR', brazilian: 'pt-BR', portuguese: 'pt-BR', portuges: 'pt-BR', brazilianportuguese: 'pt-BR',
+};
+
+/**
+ * Idioma provável do documento: o principal do babel (a última opção) ou do
+ * polyglossia; sem isso, compara palavras comuns de cada língua no texto.
+ */
+function detectDocumentLanguage() {
+    const source = currentFiles()[mainFile]?.content || '';
+    const text = source.split('\n').map(l => l.replace(/(^|[^\\])%.*$/, '$1')).join('\n');
+    const babel = text.match(/\\usepackage\s*\[([^\]]*)\]\s*\{babel\}/);
+    if (babel) {
+        const options = babel[1].split(',').map(o => o.trim()).filter(o => BABEL_LANGUAGES[o]);
+        const main = options.find(o => /main=/.test(o)) || options[options.length - 1];
+        if (main) return BABEL_LANGUAGES[main];
+    }
+    const poly = text.match(/\\setmainlanguage\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/);
+    if (poly && BABEL_LANGUAGES[poly[1].trim()]) return BABEL_LANGUAGES[poly[1].trim()];
+    const count = (words) => words.reduce((n, w) => n + (text.match(new RegExp(`\\b${w}\\b`, 'gi')) || []).length, 0);
+    const english = count(['the', 'and', 'of', 'is', 'with', 'which', 'are']);
+    const portuguese = count(['de', 'que', 'para', 'com', 'uma', 'não', 'são']);
+    return english > portuguese * 1.5 ? 'en-US' : 'pt-BR';
+}
+
+/** Preferência guardada por projeto: 'pt-BR', 'en-US', 'off' ou null. */
+function spellPrefKey() {
+    return `${SPELL_PREF}:${projectRoot}`;
+}
+
+function setSpellLanguage(language, { save = true } = {}) {
+    if (!spellExtensions) spellExtensions = {};
+    if (language !== 'off' && !spellExtensions[language]) {
+        // Um corretor por idioma: cada um guarda o que já verificou
+        spellExtensions[language] = [
             spellChecker({
-                check: (words) => StorageService.spellCheck(words),
-                suggest: (word) => StorageService.spellSuggest(word),
-                add: (word) => StorageService.spellAdd(word),
+                check: (words) => StorageService.spellCheck(words, language),
+                suggest: (word) => StorageService.spellSuggest(word, language),
+                add: (word) => StorageService.spellAdd(word, language),
                 showMenu: showSpellMenu,
             }),
             spellTheme,
         ];
     }
-    editor.setExtras(enabled ? spellExtensions : []);
+    spellLanguage = language;
+    editor.setExtras(language === 'off' ? [] : spellExtensions[language]);
+
     const btn = document.getElementById('spellBtn');
-    btn.setAttribute('aria-pressed', String(enabled));
-    btn.title = enabled ? 'Corretor ortográfico ligado (clique para desligar)' : 'Corretor ortográfico desligado (clique para ligar)';
-    try {
-        localStorage.setItem(SPELL_PREF, enabled ? 'on' : 'off');
-    } catch { /* sem storage */ }
+    const info = SPELL_LANGUAGES[language];
+    btn.setAttribute('aria-pressed', String(language !== 'off'));
+    document.getElementById('spellLabel').textContent = info ? info.short : 'Ortografia';
+    btn.title = info
+        ? `Corretor ortográfico em ${info.label}. Clique para trocar o idioma ou desligar.`
+        : 'Corretor ortográfico desligado. Clique para escolher o idioma.';
+    if (save) {
+        try {
+            localStorage.setItem(spellPrefKey(), language);
+        } catch { /* sem storage */ }
+    }
+}
+
+function showSpellLanguageMenu(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const option = (value, label) => ({
+        label: `${spellLanguage === value ? '✓ ' : ' '}${label}`,
+        action: () => setSpellLanguage(value),
+    });
+    showSpellMenu({ clientX: rect.left, clientY: rect.top - 140 }, [
+        option('pt-BR', SPELL_LANGUAGES['pt-BR'].label),
+        option('en-US', SPELL_LANGUAGES['en-US'].label),
+        { separator: true },
+        option('off', 'Desligado'),
+    ]);
 }
 
 function initSpellcheck() {
-    let enabled = true;
+    let saved = null;
+    let globalOff = false;
     try {
-        enabled = localStorage.getItem(SPELL_PREF) !== 'off';
+        saved = localStorage.getItem(spellPrefKey());
+        // Versões anteriores tinham só ligar/desligar, para todos os projetos
+        globalOff = localStorage.getItem(SPELL_PREF) === 'off';
     } catch { /* sem storage */ }
-    setSpellcheck(enabled);
+    if (saved && (saved === 'off' || SPELL_LANGUAGES[saved])) {
+        setSpellLanguage(saved, { save: false });
+    } else {
+        // Sem escolha para este projeto: segue o idioma do documento
+        setSpellLanguage(globalOff ? 'off' : detectDocumentLanguage(), { save: false });
+    }
     document.getElementById('spellBtn').addEventListener('click', (event) => {
-        setSpellcheck(event.currentTarget.getAttribute('aria-pressed') !== 'true');
+        event.stopPropagation();
+        showSpellLanguageMenu(event);
     });
 }
 

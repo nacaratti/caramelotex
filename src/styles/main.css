@@ -345,6 +345,100 @@ kbd {
     color: var(--accent-strong);
 }
 
+/* ---------- Aviso de atualização (canto inferior esquerdo) ---------- */
+.update-card {
+    position: fixed;
+    left: 1rem;
+    bottom: 2.25rem;
+    z-index: 60;
+    width: 21rem;
+    max-width: calc(100vw - 2rem);
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    animation: update-in 0.2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .update-card { animation: none; }
+}
+
+@keyframes update-in {
+    from { opacity: 0; transform: translateY(8px); }
+}
+
+.update-icon {
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2rem;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+}
+
+.update-icon svg {
+    width: 1.1rem;
+    height: 1.1rem;
+}
+
+.update-body {
+    min-width: 0;
+    flex: 1;
+}
+
+.update-title {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text);
+}
+
+.update-text {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+
+.update-link {
+    font-size: 0.8125rem;
+    color: var(--accent-strong);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    margin-top: 0.25rem;
+}
+
+.update-progress {
+    height: 0.3rem;
+    margin-top: 0.6rem;
+    border-radius: 999px;
+    background: var(--border);
+    overflow: hidden;
+}
+
+.update-progress-bar {
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+    transition: width 0.2s;
+}
+
+.update-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.update-actions .btn {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8125rem;
+}
+
 /* ---------- Janela de pacotes ---------- */
 .pkg-panel {
     display: flex;

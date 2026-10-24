@@ -20,6 +20,11 @@
         </div>
         <div class="flex items-center gap-3">
             <span id="texStatus" class="text-xs text-muted"></span>
+            <button id="updatesBtn" class="icon-btn" title="Atualizações">
+                <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M20 11a8 8 0 0 0-14.6-4.5L4 8m0-4v4h4M4 13a8 8 0 0 0 14.6 4.5L20 16m0 4v-4h-4" />
+                </svg>
+            </button>
             <button id="themeBtn" class="icon-btn" title="Tema">
                 <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" />
@@ -77,10 +82,15 @@
     <div id="setupOverlay" class="hidden fixed inset-0 bg-bg z-50 flex items-center justify-center">
         <div class="text-center max-w-md px-6">
             <img src="/img/caramelo_loading.png" alt="" class="h-32 mx-auto mb-6">
-            <p class="text-lg font-medium mb-1">Preparando o LaTeX pela primeira vez</p>
-            <p class="text-muted text-sm mb-5">Isso só acontece uma vez e leva cerca de um minuto.</p>
-            <div class="w-full bg-line rounded-full h-1.5 overflow-hidden">
+            <p id="setupTitle" class="text-lg font-medium mb-1">Preparando o LaTeX pela primeira vez</p>
+            <p id="setupDetail" class="text-muted text-sm mb-5">O CarameloTeX baixa o LaTeX (cerca de 210 MB) uma única vez. Depois, tudo funciona sem internet.</p>
+            <div id="setupBar" class="w-full bg-line rounded-full h-1.5 overflow-hidden">
                 <div id="setupProgress" class="bg-accent h-1.5 rounded-full transition-all" style="width: 0%"></div>
+            </div>
+            <p id="setupNumbers" class="text-xs text-muted mt-2 tabular-nums"></p>
+            <div id="setupActions" class="hidden mt-5 flex justify-center gap-2">
+                <button id="setupRetry" class="btn btn-primary" type="button">Tentar de novo</button>
+                <button id="setupSkip" class="btn" type="button">Continuar sem LaTeX</button>
             </div>
         </div>
     </div>

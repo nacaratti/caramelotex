@@ -1,15 +1,18 @@
 # CarameloTeX
 
-Editor LaTeX para Windows que funciona **offline**: já vem com o LaTeX
-(TinyTeX), abre as pastas do seu computador como projetos e gera o PDF
-localmente.
+Editor LaTeX para Windows que funciona **offline**: instala o LaTeX
+(TinyTeX) sozinho na primeira abertura, abre as pastas do seu computador como
+projetos e gera o PDF localmente.
 
 **Baixar:** [CarameloTeX-setup-x64.exe](https://github.com/nacaratti/caramelotex/releases/latest/download/CarameloTeX-setup-x64.exe)
 (Windows 10 e 11, 64 bits) · [Página de versões](https://github.com/nacaratti/caramelotex/releases)
 
 ## Funcionalidades
 
-- **Offline:** o LaTeX vem no instalador e é preparado na primeira execução.
+- **Offline:** na primeira abertura o app baixa o LaTeX (cerca de 210 MB) uma
+  única vez; depois, escrever e compilar funcionam sem internet.
+- **Atualização automática:** ao abrir, o app procura versões novas e mostra um
+  aviso para reiniciar e atualizar (dá para desligar no botão *Atualizações*).
 - **Seus arquivos, suas pastas:** sem conta nem nuvem; o editor salva direto
   na pasta. Arquivos excluídos vão para a Lixeira. Se um arquivo muda fora do
   app (Git, outro editor), ele é recarregado ou o app pergunta qual versão manter.
@@ -25,7 +28,8 @@ localmente.
   rótulo; cole uma imagem (Ctrl+V) ou células do Excel/Google Planilhas. Os
   pacotes necessários são adicionados ao preâmbulo.
 - **Compilação:** pdfLaTeX, XeLaTeX ou LuaLaTeX com latexmk (BibTeX e biber
-  automáticos). Pacote faltando? O app oferece instalar.
+  automáticos). Pacotes que o documento usa e não estão instalados são
+  baixados sozinhos (com internet).
 - **Pacotes LaTeX (ícone da caixa):** veja os pacotes que o documento usa e
   quais faltam, a lista dos instalados e busque entre os ~8 mil do TeX Live
   para instalar com um clique (via `tlmgr`; busca e instalação precisam de internet).
@@ -35,8 +39,9 @@ localmente.
   PDF leva à linha.
 - **Sumário e contagem de palavras:** seções, figuras e tabelas de todos os
   arquivos; contagem por seção com o texcount.
-- **Corretor ortográfico pt-BR** offline (dicionário VERO), com sugestões e
-  dicionário pessoal.
+- **Corretor ortográfico em português e inglês** offline (dicionários VERO e
+  SCOWL), com sugestões e dicionário pessoal; o idioma é detectado pelo
+  documento e pode ser trocado na barra de status.
 - **Tema claro e escuro**, seguindo o Windows por padrão.
 - **11 modelos:** artigo ABNT, IEEE, TCC, dissertação/tese, Beamer, currículo e outros.
 
@@ -54,7 +59,7 @@ src/                 frontend (index.html = editor, projects.html, templates.htm
 src-tauri/           backend Rust
   src/               fs_commands (arquivos), compile (latexmk), tex (TinyTeX),
                      spell (corretor), paths (segurança de caminhos)
-  resources/         tinytex.zip (gerado) e dict/ (dicionário pt-BR)
+  resources/         dict/ (dicionários pt-BR e en-US)
 scripts/             build-tinytex.ps1
 site/                landing page (publicada no Vercel)
 tests/fixtures/      documentos usados nos testes de compilação
@@ -69,14 +74,19 @@ tests/fixtures/      documentos usados nos testes de compilação
 
 ```bash
 npm install
-# Gera src-tauri/resources/tinytex.zip (precisa de internet; ~25 min na 1ª vez)
-powershell -ExecutionPolicy Bypass -File scripts/build-tinytex.ps1
 npm run tauri dev     # app em modo de desenvolvimento
 npm run tauri build   # instalador em target/release/bundle/nsis/
 ```
 
-Ao mudar a lista de pacotes do TinyTeX, aumente `$BundleRevision` no script:
-o app compara a versão e atualiza o LaTeX de quem já tem uma versão anterior.
+O LaTeX não vai no instalador: na primeira execução o app baixa o zip da release
+[`tinytex-2026.10-r2`](https://github.com/nacaratti/caramelotex/releases/tag/tinytex-2026.10-r2)
+e confere o SHA-256 (constantes `TINYTEX_*` em `src-tauri/src/tex.rs`). Para usar
+um zip local, defina `CARAMELOTEX_TINYTEX_ZIP` com o caminho dele.
+
+Para mudar a lista de pacotes do TinyTeX: aumente `$BundleRevision` em
+`scripts/build-tinytex.ps1`, rode o workflow [`tinytex.yml`](.github/workflows/tinytex.yml)
+(aba Actions) e copie para `tex.rs` a versão, o link, o tamanho e o SHA-256 que ele
+mostra no fim. O app compara a versão e baixa o LaTeX novo para quem tem o anterior.
 
 ### Testes
 
@@ -92,13 +102,19 @@ CARAMELOTEX_TEX_BIN=".../TinyTeX/bin/windows" cargo test --manifest-path src-tau
    e o histórico em `site/sobre.html`.
 2. Faça o commit e envie uma tag com a mesma versão: `git tag v0.4.0 && git push origin v0.4.0`.
 3. O workflow [`release.yml`](.github/workflows/release.yml) gera o instalador no GitHub
-   Actions, pede a assinatura à SignPath (aprove no painel dela) e cria a release como
-   rascunho com o arquivo **`CarameloTeX-setup-x64.exe`** (nome fixo: a landing aponta para
-   `releases/latest/download/CarameloTeX-setup-x64.exe`). Revise e publique o rascunho.
+   Actions, pede a assinatura à SignPath (aprove no painel dela), assina para o
+   atualizador e cria a release como rascunho com **`CarameloTeX-setup-x64.exe`** e
+   **`latest.json`** (nomes fixos: a landing aponta para
+   `releases/latest/download/CarameloTeX-setup-x64.exe` e o app procura atualizações em
+   `releases/latest/download/latest.json`). Revise e publique o rascunho: a partir daí, os
+   apps instalados mostram o aviso de atualização.
 
-A assinatura usa o secret `SIGNPATH_API_TOKEN` e as variáveis `SIGNPATH_ORGANIZATION_ID`,
-`SIGNPATH_PROJECT_SLUG` e `SIGNPATH_SIGNING_POLICY_SLUG` do repositório; sem elas, o
-instalador sai sem assinatura. A configuração de artefato da SignPath está em
+O atualizador usa a chave em `~/.tauri/caramelotex-updater.key` (guarde uma cópia: sem ela
+não dá para publicar atualizações que os apps instalados aceitem), cadastrada nos secrets
+`TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; a chave pública está em
+`src-tauri/tauri.conf.json`. A assinatura do Windows usa o secret `SIGNPATH_API_TOKEN` e as
+variáveis `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG` e `SIGNPATH_SIGNING_POLICY_SLUG`;
+sem elas, o instalador sai sem essa assinatura. A configuração de artefato da SignPath está em
 [`.signpath/artifact-configuration.xml`](.signpath/artifact-configuration.xml), e a política
 de assinatura em `site/assinatura.html` (publicada em `/assinatura`).
 
@@ -109,5 +125,5 @@ O CarameloTeX é distribuído sob a [licença MIT](LICENSE).
 ## Licenças de terceiros
 
 TinyTeX/TeX Live (licenças livres dos respectivos pacotes), dicionário VERO
-pt-BR (LGPLv3/MPL), MathLive (MIT), fontes IBM Plex Sans e JetBrains Mono (OFL), KaTeX (MIT), Latin Modern
+pt-BR (LGPLv3/MPL), dicionário en-US do SCOWL/LibreOffice (licença do SCOWL, tipo BSD), MathLive (MIT), fontes IBM Plex Sans e JetBrains Mono (OFL), KaTeX (MIT), Latin Modern
 (GUST Font License).

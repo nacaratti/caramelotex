@@ -583,6 +583,15 @@ section h2 {
     font-weight: 700;
 }
 
+.connections {
+    margin: 0 0 1rem;
+    padding-left: 1.2rem;
+}
+
+.connections li {
+    margin-bottom: 0.6rem;
+}
+
 .roles dt {
     font-weight: 700;
     margin-top: 1rem;

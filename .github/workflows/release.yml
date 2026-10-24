@@ -4,10 +4,16 @@
 # Dispara ao enviar uma tag de versão (git tag v0.4.0 && git push origin v0.4.0)
 # ou manualmente pela aba Actions (só gera o instalador, sem release).
 #
-# Assinatura: defina no repositório (Settings > Secrets and variables > Actions)
-#   secret   SIGNPATH_API_TOKEN
-#   variáveis SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_SLUG, SIGNPATH_SIGNING_POLICY_SLUG
-# Sem essas variáveis, o instalador sai sem assinatura.
+# O LaTeX (TinyTeX) não vai no instalador: o app baixa na 1ª execução a partir
+# da release tinytex-* (veja o workflow tinytex.yml).
+#
+# Secrets e variáveis do repositório (Settings > Secrets and variables > Actions):
+#   TAURI_SIGNING_PRIVATE_KEY e TAURI_SIGNING_PRIVATE_KEY_PASSWORD (secrets):
+#     chave do atualizador; assinam o instalador e geram o latest.json que o
+#     app consulta para se atualizar. Obrigatórios para criar a release.
+#   SIGNPATH_API_TOKEN (secret) e SIGNPATH_ORGANIZATION_ID,
+#   SIGNPATH_PROJECT_SLUG, SIGNPATH_SIGNING_POLICY_SLUG (variáveis):
+#     assinatura do Windows; sem eles, o instalador sai sem essa assinatura.
 name: Release
 
 on:
@@ -22,7 +28,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 340
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v7
 
@@ -45,19 +51,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-
-      # O TinyTeX leva ~25 min para montar; só refaz quando o script muda.
-      - name: Restaurar TinyTeX
-        id: tinytex
-        uses: actions/cache@v6
-        with:
-          path: src-tauri/resources/tinytex.zip
-          key: tinytex-${{ hashFiles('scripts/build-tinytex.ps1') }}
-
-      - name: Montar TinyTeX
-        if: steps.tinytex.outputs.cache-hit != 'true'
-        shell: powershell
-        run: ./scripts/build-tinytex.ps1
 
       - run: npm ci
 
@@ -95,16 +88,45 @@ jobs:
           wait-for-completion-timeout-in-seconds: 14400
           output-artifact-directory: signed
 
+      # Depois da assinatura do Windows (que altera o arquivo): assina para o
+      # atualizador e gera o latest.json que o app consulta.
+      - name: Preparar atualização automática
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Falta o secret TAURI_SIGNING_PRIVATE_KEY (chave do atualizador)' }
+          New-Item -ItemType Directory -Force release | Out-Null
+          $source = if (Test-Path 'signed/CarameloTeX-setup-x64.exe') { 'signed' } else {
+            Write-Warning 'Instalador sem assinatura do Windows (SignPath não configurada)'
+            'unsigned'
+          }
+          Copy-Item "$source/CarameloTeX-setup-x64.exe" release/
+          npx tauri signer sign release/CarameloTeX-setup-x64.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao assinar para o atualizador' }
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $manifest = [ordered]@{
+            version  = $version
+            notes    = "Veja as novidades em https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$env:GITHUB_REF_NAME"
+            pub_date = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+            platforms = [ordered]@{
+              'windows-x86_64' = [ordered]@{
+                signature = (Get-Content release/CarameloTeX-setup-x64.exe.sig -Raw).Trim()
+                url       = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:GITHUB_REF_NAME/CarameloTeX-setup-x64.exe"
+              }
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content release/latest.json -Encoding utf8NoBOM
+          Get-Content release/latest.json
+
       - name: Criar release (rascunho)
         if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $file = 'signed/CarameloTeX-setup-x64.exe'
-          if (-not (Test-Path $file)) {
-            Write-Warning 'Instalador sem assinatura (SignPath não configurada)'
-            $file = 'unsigned/CarameloTeX-setup-x64.exe'
-          }
           $version = $env:GITHUB_REF_NAME.TrimStart('v')
-          gh release create $env:GITHUB_REF_NAME $file --draft --title "CarameloTeX $version" --generate-notes
+          gh release create $env:GITHUB_REF_NAME release/CarameloTeX-setup-x64.exe release/latest.json `
+            --draft --title "CarameloTeX $version" --generate-notes

@@ -249,15 +249,15 @@ export const StorageService = {
     // ---------------------------------------------------------------
 
     /**
-     * Prepara a distribuição LaTeX (extrai o TinyTeX embutido na 1ª vez).
-     * @param {(done: number, total: number) => void} [onProgress]
+     * Prepara a distribuição LaTeX (baixa e extrai o TinyTeX na 1ª vez).
+     * @param {(phase: 'download'|'verify'|'extract', done: number, total: number) => void} [onProgress]
      * @returns {Promise<{source, binDir, hasLatexmk} | null>}
      */
     async prepareTex(onProgress) {
         let unlisten = null;
         if (onProgress) {
             unlisten = await listen('tex-setup-progress', (event) => {
-                onProgress(event.payload.done, event.payload.total);
+                onProgress(event.payload.phase, event.payload.done, event.payload.total);
             });
         }
         try {
@@ -308,16 +308,17 @@ export const StorageService = {
     },
 
     /** Palavras (da lista) que o corretor pt-BR não conhece. */
-    spellCheck(words) {
-        return this._invoke('spell_check', { words });
+    /** lang: 'pt-BR' ou 'en-US'. */
+    spellCheck(words, lang) {
+        return this._invoke('spell_check', { words, lang });
     },
 
-    spellSuggest(word) {
-        return this._invoke('spell_suggest', { word });
+    spellSuggest(word, lang) {
+        return this._invoke('spell_suggest', { word, lang });
     },
 
-    spellAdd(word) {
-        return this._invoke('spell_add', { word });
+    spellAdd(word, lang) {
+        return this._invoke('spell_add', { word, lang });
     },
 
     cancelCompile() {
