@@ -21,11 +21,16 @@ function stripComments(text) {
 // Nomes de pacote de verdade (descarta argumentos de macro como "styles/#1")
 const VALID_NAME = /^[A-Za-z0-9._-]+$/;
 
-/** Pacotes e classe que o projeto pede (inclusive os .cls/.sty da pasta): [{ name, file, kind }]. */
+/**
+ * Pacotes e classe que os .tex do projeto pedem: [{ name, file, kind }].
+ * Os .cls/.sty da pasta ficam de fora: costumam citar pacotes só usados em
+ * opções que o documento não liga (ex.: fontes pagas no IEEEtran.cls); o que
+ * eles usam de fato aparece no log da compilação e é instalado de lá.
+ */
 function requestedPackages(files) {
     const found = new Map();
-    for (const file of Object.values(files)) {
-        if (typeof file.content !== 'string') continue;
+    for (const [path, file] of Object.entries(files)) {
+        if (typeof file.content !== 'string' || !/\.(tex|ltx)$/i.test(path)) continue;
         const text = stripComments(file.content);
         for (const m of text.matchAll(/\\(?:usepackage|RequirePackage)\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/g)) {
             for (const name of m[1].split(',').map(s => s.trim()).filter(n => VALID_NAME.test(n))) {

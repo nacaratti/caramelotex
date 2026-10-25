@@ -309,20 +309,55 @@ function getEditorContent() {
 // Compila localmente pelo backend (latexmk + TinyTeX/TeX do sistema), lendo os arquivos do disco.
 let isCompiling = false;
 let compileRequestId = 0;
-// A última compilação falhou: a próxima força o latexmk a rodar de novo
-let lastCompileFailed = false;
+// A última compilação falhou: a próxima força o latexmk a rodar de novo.
+// Começa ligado: o log de uma sessão anterior pode estar velho (ex.: um pacote
+// foi instalado depois) e o latexmk não roda de novo se nada no projeto mudou.
+let lastCompileFailed = true;
 
-/** Arquivo .sty/.cls faltando no log ("LaTeX Error: File `x.sty' not found"), ou null. */
+/**
+ * Arquivo faltando no log, ou null: um .sty/.cls ("LaTeX Error: File `x.sty'
+ * not found") ou a métrica de uma fonte ("Font OT1/pcr/m/n/10=pcrr7t at 10.0pt
+ * not loadable: Metric (TFM) file not found" -> pcrr7t.tfm).
+ */
 function findMissingFile(log) {
-    const match = log.match(/File `([^']+\.(?:sty|cls|bst|def|cfg|clo|fd|bbx|cbx|lbx))' not found/);
-    return match ? match[1] : null;
+    const file = log.match(/File `([^']+\.(?:sty|cls|bst|def|cfg|clo|fd|bbx|cbx|lbx))' not found/);
+    if (file) return file[1];
+    const font = log.match(/=([A-Za-z0-9_-]+)(?: at [\d.]+pt)? not loadable: Metric \(TFM\) file not found/);
+    return font ? `${font[1]}.tfm` : null;
 }
 
 // Instalação automática dos pacotes que o documento pede e que faltam no LaTeX.
 let installingPackages = false;
-// Arquivos cuja instalação falhou nesta sessão (sem internet, nome inexistente):
-// não tenta de novo a cada compilação.
+// Arquivos cuja instalação falhou nesta sessão: não tenta de novo a cada compilação.
 const failedPackageFiles = new Set();
+// Arquivos que não existem em nenhum pacote do TeX Live (ex.: fontes comerciais
+// como mtpro2): ficam guardados por 30 dias para não tentar a cada abertura.
+// Falhas de rede não entram aqui. A janela Pacotes continua permitindo tentar.
+const UNAVAILABLE_KEY = 'caramelotex.unavailablePackages';
+const UNAVAILABLE_MS = 30 * 24 * 60 * 60 * 1000;
+
+function readUnavailable() {
+    try {
+        return JSON.parse(localStorage.getItem(UNAVAILABLE_KEY) || '{}');
+    } catch {
+        return {};
+    }
+}
+
+function rememberUnavailable(file) {
+    const known = readUnavailable();
+    known[file] = Date.now();
+    try {
+        localStorage.setItem(UNAVAILABLE_KEY, JSON.stringify(known));
+    } catch { /* sem storage */ }
+}
+
+/** O arquivo já falhou nesta sessão ou não existe no TeX Live (lembrado em disco)? */
+function isKnownMissing(file) {
+    if (failedPackageFiles.has(file)) return true;
+    const when = readUnavailable()[file];
+    return Boolean(when) && Date.now() - when < UNAVAILABLE_MS;
+}
 // Rodadas seguidas de "instalar e recompilar" (um pacote pode puxar outro)
 let installRounds = 0;
 const MAX_INSTALL_ROUNDS = 10;
@@ -341,9 +376,10 @@ async function installMissingPackages(fromLog = null) {
         const { findMissingPackages } = await import('./packages-dialog.js');
         let missing = await findMissingPackages(currentFiles()).catch(() => []);
         if (fromLog && !missing.some(m => m.file === fromLog)) {
-            missing.unshift({ name: fromLog.replace(/\.[^.]+$/, ''), file: fromLog });
+            const base = fromLog.replace(/\.[^.]+$/, '');
+            missing.unshift({ name: fromLog.endsWith('.tfm') ? `fonte ${base}` : base, file: fromLog });
         }
-        missing = missing.filter(m => !failedPackageFiles.has(m.file));
+        missing = missing.filter(m => !isKnownMissing(m.file));
         if (!missing.length) return false;
 
         // Sem internet: avisa (uma vez por conjunto de pacotes) e tenta de novo
@@ -363,6 +399,7 @@ async function installMissingPackages(fromLog = null) {
 
         const installed = [];
         const failed = [];
+        const unavailable = [];
         for (const [index, item] of missing.entries()) {
             // Um pacote já instalado pode trazer o arquivo seguinte (newtxmath e newtxtext vêm no newtx)
             const present = await StorageService.checkTexFiles([item.file]).catch(() => []);
@@ -372,14 +409,23 @@ async function installMissingPackages(fromLog = null) {
                 installed.push(await StorageService.installMissingFile(item.file));
             } catch (e) {
                 console.error(e);
-                failed.push(item);
                 failedPackageFiles.add(item.file);
+                if (String(e).includes('Nenhum pacote do TeX Live contém')) {
+                    rememberUnavailable(item.file);
+                    unavailable.push(item);
+                } else {
+                    failed.push(item);
+                }
             }
         }
 
+        if (unavailable.length) {
+            const names = unavailable.map(f => f.name).join(', ');
+            showToast(`${names}: não existe no TeX Live (pode ser um pacote comercial ou de outro site). Se o documento precisar dele, instale à parte e coloque o arquivo na pasta do projeto.`, 'warning');
+        }
         if (failed.length) {
             const names = failed.map(f => f.name).join(', ');
-            showToast(`Não foi possível instalar: ${names}. O pacote pode não existir no TeX Live; veja a janela Pacotes (ícone da caixa).`, 'error');
+            showToast(`Não foi possível instalar: ${names}. Tente de novo na janela Pacotes (ícone da caixa).`, 'error');
         }
         if (installed.length) {
             const unique = [...new Set(installed)];
@@ -396,8 +442,18 @@ async function installMissingPackages(fromLog = null) {
 async function autoInstallAndRecompile(file) {
     if (installingPackages || installRounds >= MAX_INSTALL_ROUNDS) return;
     installRounds++;
-    if (await installMissingPackages(file)) compile();
-    else installRounds = 0;
+    if (await installMissingPackages(file)) {
+        compile();
+        return;
+    }
+    // O arquivo já está instalado: o log é de antes da instalação; compila de novo
+    const present = await StorageService.checkTexFiles([file]).catch(() => []);
+    if (present.length) {
+        lastCompileFailed = true;
+        compile();
+        return;
+    }
+    installRounds = 0;
 }
 
 async function compile() {
@@ -459,7 +515,7 @@ async function compile() {
 
         if (result.ok) {
             installRounds = 0;
-            const warnings = logEntries.filter(e => e.type === 'warning').concat(detectSourceWarnings(projectFiles));
+            const warnings = logEntries.filter(e => e.type === 'warning').concat(detectSourceWarnings(projectFiles, result.output));
             renderErrorLog(warnings);
             highlightErrors(warnings);
             compileStatus.textContent = `PDF gerado (${(result.durationMs / 1000).toFixed(1)}s)`;
@@ -483,21 +539,29 @@ async function compile() {
                 line: null,
             });
         }
-        compileStatus.textContent = 'Erro na compilação';
+        // O LaTeX costuma gerar o PDF mesmo com erros: nesse caso mostra o PDF
+        // (os erros ficam no botão de erros, marcado em vermelho)
+        const errorCount = logEntries.filter(e => e.type === 'error').length;
+        const pdfDespiteErrors = Boolean(result.pdfFile) && !result.timedOut;
+        compileStatus.textContent = pdfDespiteErrors
+            ? `PDF gerado com ${errorCount} ${errorCount === 1 ? 'erro' : 'erros'}`
+            : 'Erro na compilação';
         renderErrorLog(logEntries);
         highlightErrors(logEntries);
-        switchViewerMode('logs');
+        switchViewerMode(pdfDespiteErrors ? 'pdf' : 'logs');
         toggleBtn.dataset.status = 'error';
         toggleBtn.title = 'Erros na compilação — ver detalhes';
 
         // Falta um pacote: instala sozinho (ou avisa que precisa de internet)
         // em vez de mostrar só o erro
         const missing = findMissingFile(result.log);
-        if (missing && !failedPackageFiles.has(missing) && installRounds < MAX_INSTALL_ROUNDS) {
+        if (missing && !isKnownMissing(missing) && installRounds < MAX_INSTALL_ROUNDS) {
             compileStatus.textContent = `Falta o pacote de ${missing}`;
             autoInstallAndRecompile(missing);
         } else {
-            showToast('Erro na compilação', 'error');
+            showToast(pdfDespiteErrors
+                ? `PDF gerado, mas com ${errorCount} ${errorCount === 1 ? 'erro' : 'erros'}: veja a lista no botão de erros, acima do PDF`
+                : 'Erro na compilação', pdfDespiteErrors ? 'warning' : 'error');
             if (!missing) installRounds = 0;
         }
     } catch (error) {
@@ -625,10 +689,12 @@ function parseLatexLog(logText) {
 }
 
 /**
- * Detecta potenciais problemas no código-fonte LaTeX (análise client-side).
- * Útil porque a API não retorna logs quando a compilação gera PDF com sucesso.
+ * Detecta potenciais problemas no código-fonte LaTeX que o log não aponta:
+ * \ref sem \label, imagem ou .bib ausente. Com a saída da compilação
+ * (toolOutput), um .bib que não está na pasta só gera aviso se o BibTeX não o
+ * encontrou (ex.: IEEEabrv.bib vem com o LaTeX).
  */
-function detectSourceWarnings(files) {
+function detectSourceWarnings(files, toolOutput = null) {
     const warnings = [];
     const allLabels = new Set();
     const allRefs = [];
@@ -636,12 +702,17 @@ function detectSourceWarnings(files) {
     const allBibResources = [];
     const fileNames = new Set(Object.keys(files));
 
-    // Primeira passagem: coleta labels, refs, includes de todos os arquivos
+    // Primeira passagem: coleta labels, refs, includes dos .tex do projeto
+    // (.bib, .cls e .sty trazem exemplos e comandos que não são do documento)
     Object.entries(files).forEach(function(entry) {
         var filename = entry[0];
         var file = entry[1];
         if (file.type === 'folder' || file.type === 'binary') return;
-        var content = file.content || '';
+        if (!/\.(tex|ltx)$/i.test(filename)) return;
+        // Sem comentários, mantendo as quebras de linha (para os números de linha)
+        var content = (file.content || '').split('\n').map(function(line) {
+            return line.replace(/(^|[^\\])%.*$/, '$1');
+        }).join('\n');
 
         // Coleta \label{...}
         var labelRe = /\\label\{([^}]+)\}/g;
@@ -667,10 +738,13 @@ function detectSourceWarnings(files) {
             allIncludes.push({ path: m[1], file: filename, line: imgLine });
         }
 
-        // Coleta \bibliography{...} e \addbibresource{...}
-        var bibRe = /\\(?:bibliography|addbibresource)\{([^}]+)\}/g;
+        // Coleta \bibliography{a,b} (vários arquivos, separados por vírgula) e \addbibresource{...}
+        var bibRe = /\\(bibliography|addbibresource)(?:\[[^\]]*\])?\{([^}]+)\}/g;
         while ((m = bibRe.exec(content)) !== null) {
-            allBibResources.push({ path: m[1], file: filename });
+            var bibNames = m[1] === 'bibliography' ? m[2].split(',') : [m[2]];
+            bibNames.map(function(n) { return n.trim().replace(/^\.\//, ''); }).filter(Boolean).forEach(function(n) {
+                allBibResources.push({ path: n, file: filename });
+            });
         }
     });
 
@@ -714,7 +788,10 @@ function detectSourceWarnings(files) {
     allBibResources.forEach(function(bib) {
         var bibPath = joinPath(mainDir(), bib.path);
         if (!bibPath.endsWith('.bib')) bibPath += '.bib';
-        if (!fileNames.has(bibPath)) {
+        var bibName = bibPath.split('/').pop();
+        var bibtexMissed = toolOutput === null || toolOutput.includes('database file ' + bibName)
+            || toolOutput.includes('database file ' + bibName.replace(/\.bib$/, ''));
+        if (!fileNames.has(bibPath) && bibtexMissed) {
             warnings.push({
                 type: 'warning',
                 message: 'Arquivo de bibliografia "' + bib.path + '" não encontrado nos arquivos do projeto',
