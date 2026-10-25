@@ -36,6 +36,25 @@ const SyncTexParser = (function() {
         let currentPage = null;
         let lineIndex = 0;
 
+        // "Input:tag:caminho" aparece no preâmbulo e também no meio do conteúdo,
+        // quando o TeX abre um arquivo depois (\input de capítulos, o .bbl...)
+        function readInput(line) {
+            const match = line.match(/^Input:(\d+):(.+)$/);
+            if (!match) return;
+            const tag = parseInt(match[1]);
+            let path = match[2].trim();
+            // Normaliza o caminho (relativo à pasta do projeto)
+            path = path.replace(/\\/g, '/').replace(/\/\.\//g, '/').replace(/^\.\//, '');
+            if (rootPrefix && path.toLowerCase().startsWith(rootPrefix)) {
+                path = path.substring(rootPrefix.length);
+            }
+            result.inputs[tag] = {
+                tag: tag,
+                name: path.split('/').pop(),
+                path: path
+            };
+        }
+
         // Parse preamble
         while (lineIndex < lines.length) {
             const line = lines[lineIndex];
@@ -43,22 +62,7 @@ const SyncTexParser = (function() {
             if (line.startsWith('SyncTeX Version:')) {
                 result.version = parseInt(line.split(':')[1]) || 1;
             } else if (line.startsWith('Input:')) {
-                // Format: Input:tag:path
-                const match = line.match(/^Input:(\d+):(.+)$/);
-                if (match) {
-                    const tag = parseInt(match[1]);
-                    let path = match[2];
-                    // Normaliza o caminho
-                    path = path.replace(/\\/g, '/').replace(/\/\.\//g, '/').replace(/^\.\//, '');
-                    if (rootPrefix && path.toLowerCase().startsWith(rootPrefix)) {
-                        path = path.substring(rootPrefix.length);
-                    }
-                    result.inputs[tag] = {
-                        tag: tag,
-                        name: path.split('/').pop(),
-                        path: path
-                    };
-                }
+                readInput(line);
             } else if (line.startsWith('Magnification:')) {
                 result.magnification = parseInt(line.split(':')[1]) || 1000;
             } else if (line.startsWith('Unit:')) {
@@ -85,8 +89,12 @@ const SyncTexParser = (function() {
                 break;
             }
 
+            // Arquivo aberto no meio do documento
+            if (line.startsWith('Input:')) {
+                readInput(line);
+            }
             // Nova página: {pageNum ou {pageNum:x,y
-            if (line.startsWith('{')) {
+            else if (line.startsWith('{')) {
                 const pageMatch = line.match(/^\{(\d+)/);
                 if (pageMatch) {
                     currentPage = {
@@ -144,61 +152,47 @@ const SyncTexParser = (function() {
     }
 
     /**
-     * Parseia um bloco (vbox ou hbox)
+     * Lê um registro do SyncTeX. Formato (os grupos separados por ":"):
+     *   [tag,linha[,coluna]:h,v:W,H,D   caixa vertical (e "(" horizontal, "v"/"h" vazias)
+     *   xtag,linha[,coluna]:h,v          elemento (x, g, $), e "k...:h,v:W" para kern
+     * A coluna é opcional (o pdfTeX não a grava): ler por posição fixa
+     * deslocava todos os campos seguintes.
      */
-    function parseBlock(line, startChar, inputs) {
-        // Format: [tag,line,column,h,v,W,H,D ou (tag,line,column,h,v,W,H,D
-        // Pode usar = para repetir valor anterior, ou : para separar
-        const content = line.substring(1); // Remove [ ou (
-        const parts = content.split(/[,:]/);
+    function parseRecord(line, type, inputs) {
+        const groups = line.substring(1).split(':');
+        const head = groups[0].split(',');
+        const pos = (groups[1] || '').split(',');
+        const size = (groups[2] || '').split(',');
+        if (head.length < 2 || pos.length < 2) return null;
 
-        if (parts.length < 4) return null;
-
-        const tag = parseInt(parts[0]) || 1;
+        const tag = parseInt(head[0]) || 1;
         const inputInfo = inputs[tag] || { name: 'main.tex', path: 'main.tex' };
 
         return {
-            type: startChar === '[' ? 'vbox' : 'hbox',
+            type,
             file: inputInfo.path,
             fileName: inputInfo.name,
             fileTag: tag,
-            line: parseInt(parts[1]) || 0,
-            column: parseInt(parts[2]) || 0,
-            h: parseCoord(parts[3]),
-            v: parseCoord(parts[4]),
-            width: parseCoord(parts[5]),
-            height: parseCoord(parts[6]),
-            depth: parseCoord(parts[7])
+            line: parseInt(head[1]) || 0,
+            column: head.length > 2 ? parseInt(head[2]) || 0 : 0,
+            h: parseCoord(pos[0]),
+            v: parseCoord(pos[1]),
+            width: parseCoord(size[0]),
+            height: parseCoord(size[1]),
+            depth: parseCoord(size[2])
         };
     }
 
-    /**
-     * Parseia blocos inline (v, h, x, k, g, $)
-     */
+    /** Caixa vertical ("[") ou horizontal ("("). */
+    function parseBlock(line, startChar, inputs) {
+        return parseRecord(line, startChar === '[' ? 'vbox' : 'hbox', inputs);
+    }
+
+    /** Caixas vazias (v, h) e elementos (x, k, g, $). */
     function parseInlineBlock(line, inputs, currentPage) {
-        const type = line[0];
-        const content = line.substring(1);
-        const parts = content.split(/[,:]/);
-
-        if (parts.length < 3) return null;
-
-        const tag = parseInt(parts[0]) || 1;
-        const inputInfo = inputs[tag] || { name: 'main.tex', path: 'main.tex' };
-
-        return {
-            type: type,
-            file: inputInfo.path,
-            fileName: inputInfo.name,
-            fileTag: tag,
-            line: parseInt(parts[1]) || 0,
-            column: parseInt(parts[2]) || 0,
-            h: parseCoord(parts[3]),
-            v: parseCoord(parts[4]),
-            width: parseCoord(parts[5]),
-            height: parseCoord(parts[6]),
-            depth: parseCoord(parts[7]),
-            page: currentPage ? currentPage.page : 1
-        };
+        const block = parseRecord(line, line[0], inputs);
+        if (block) block.page = currentPage ? currentPage.page : 1;
+        return block;
     }
 
     /**
@@ -310,9 +304,18 @@ const SyncTexParser = (function() {
 
         let bestMatch = null;
         let bestDistance = Infinity;
+        // Os blocos se aninham (coluna > parágrafo > linha): entre os que contêm o
+        // ponto, vale o de menor área. Escolher o primeiro pegaria a coluna
+        // inteira, que aponta para a linha onde a seção começou.
+        let bestArea = Infinity;
+        let bestBlock = null;
+        // Caixas altas (mais de ~3 linhas) são contêineres (página, coluna,
+        // figura): a linha delas é a de onde o bloco começou, não a do ponto.
+        const maxBoxHeight = 40 * 65536 / (synctexData.unit || 1);
 
         for (const block of page.blocks) {
             if (!block.line || block.line <= 0) continue;
+            if ((block.height || 0) + (block.depth || 0) > maxBoxHeight) continue;
 
             // Calcula distância do ponto ao bloco
             const blockX = block.h || 0;
@@ -325,17 +328,22 @@ const SyncTexParser = (function() {
             const insideY = y >= blockY - blockH && y <= blockY;
 
             let distance;
+            const area = blockW * blockH;
             if (insideX && insideY) {
                 distance = 0;
             } else {
-                // Distância ao centro do bloco
-                const centerX = blockX + blockW / 2;
-                const centerY = blockY - blockH / 2;
-                distance = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+                // Distância à borda do bloco (ao centro, uma linha larga pareceria
+                // longe mesmo com o ponto em cima dela)
+                const dx = Math.max(blockX - x, 0, x - (blockX + blockW));
+                const dy = Math.max((blockY - blockH) - y, 0, y - (blockY + (block.depth || 0)));
+                distance = Math.sqrt(dx * dx + dy * dy);
             }
 
-            if (distance < bestDistance) {
+            const better = distance < bestDistance || (distance === 0 && bestDistance === 0 && area < bestArea);
+            if (better) {
                 bestDistance = distance;
+                bestArea = distance === 0 ? area : Infinity;
+                bestBlock = block;
                 bestMatch = {
                     file: block.file || 'main.tex',
                     fileName: block.fileName || 'main.tex',
@@ -346,7 +354,41 @@ const SyncTexParser = (function() {
             }
         }
 
+        // Uma caixa de linha costuma trazer o número da linha em que o parágrafo
+        // terminou (às vezes a linha em branco depois dele); os elementos dentro
+        // dela (palavras, espaços) trazem a linha certa.
+        if (bestMatch && bestBlock && bestBlock.type === 'hbox') {
+            const node = nodeInRow(page, bestBlock, x);
+            if (node) {
+                bestMatch.file = node.file || bestMatch.file;
+                bestMatch.fileName = node.fileName || bestMatch.fileName;
+                bestMatch.line = node.line;
+                bestMatch.column = node.column || 0;
+            }
+        }
         return bestMatch;
+    }
+
+    /**
+     * Elemento (palavra, espaço, kern) da linha de texto `row` mais próximo de x,
+     * ou null. Elementos sem largura ficam na linha de base da caixa.
+     */
+    function nodeInRow(page, row, x) {
+        const top = (row.v || 0) - (row.height || 0);
+        const bottom = (row.v || 0) + (row.depth || 0);
+        let best = null;
+        let bestDx = Infinity;
+        for (const block of page.blocks) {
+            if (block.type === 'hbox' || block.type === 'vbox' || !(block.line > 0)) continue;
+            const v = block.v || 0;
+            if (v < top || v > bottom) continue;
+            const dx = Math.abs((block.h || 0) - x);
+            if (dx < bestDx) {
+                bestDx = dx;
+                best = block;
+            }
+        }
+        return best;
     }
 
     /**
@@ -416,6 +458,7 @@ const SyncTexParser = (function() {
         parse: parse,
         forwardSync: forwardSync,
         reverseSync: reverseSync,
+        nodeInRow: nodeInRow,
         synctexToCanvas: synctexToCanvas,
         canvasToSynctex: canvasToSynctex
     };

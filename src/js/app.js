@@ -171,6 +171,8 @@ function initResizer() {
     let isResizing = false;
 
     resizer.addEventListener('mousedown', (e) => {
+        // As setas de sincronização ficam sobre o divisor: clicar nelas não redimensiona
+        if (e.target.closest('.sync-arrows')) return;
         isResizing = true;
         document.body.classList.add('cursor-col-resize', 'select-none'); // Prevent selection
     });
@@ -889,17 +891,19 @@ function highlightErrors(entries) {
         })));
 }
 
-function goToLine(line, file) {
+function goToLine(line, file, { flash = false } = {}) {
     if (!editor) return;
     const target = file || mainFile;
     if (target && target !== currentFile && isTextFile(projectFiles[target])) {
         selectFile(target);
     }
-    editor.goToLine(line);
+    editor.goToLine(line, { flash });
 }
 
 // ========== PDF VIEWER ==========
 let pdfViewer = null;
+// Último ponto clicado no PDF (página e posição), para a seta "PDF -> código"
+let lastPdfPoint = null;
 
 function initViewer() {
     switchViewerMode('pdf');
@@ -912,10 +916,20 @@ function initViewer() {
             document.getElementById('zoomFitBtn').setAttribute('aria-pressed', String(fitWidth));
         },
         onPageClick(event, point) {
+            // Guarda o último ponto clicado, usado pela seta "PDF -> código" do divisor
+            lastPdfPoint = point;
             // Ctrl+clique no PDF: vai para a linha do código (SyncTeX reverso)
             if (event.ctrlKey) reverseSyncToEditor(point);
         },
+        // Duplo clique no PDF: vai para a linha do código, como no duplo clique do código
+        onPageDoubleClick(event, point) {
+            lastPdfPoint = point;
+            reverseSyncToEditor(point);
+        },
     });
+
+    document.getElementById('syncToPdfBtn').addEventListener('click', syncCursorToPdf);
+    document.getElementById('syncToCodeBtn').addEventListener('click', syncPdfToCode);
 
     document.getElementById('zoomInBtn').addEventListener('click', () => pdfViewer.zoomIn());
     document.getElementById('zoomOutBtn').addEventListener('click', () => pdfViewer.zoomOut());
@@ -940,15 +954,17 @@ function forwardSyncToPdf(lineNumber) {
     if (!currentSynctexData || !pdfViewer.numPages) return;
 
     const blocks = SyncTexParser.forwardSync(currentSynctexData, currentFile || mainFile, lineNumber);
-    if (!blocks || blocks.length === 0) return;
+    if (!blocks || blocks.length === 0) return false;
 
-    const block = blocks[0];
+    // Prefere a linha de texto ou uma palavra; a caixa da coluna (vbox) é grande demais
+    const block = blocks.find(b => b.type !== 'vbox') || blocks[0];
     const pageNum = block.page || 1;
     const coords = SyncTexParser.synctexToCanvas(currentSynctexData, block, 0, pdfViewer.scale);
 
     switchViewerMode('pdf');
     pdfViewer.scrollTo(pageNum, coords.y);
     pdfViewer.flash(pageNum, coords.y);
+    return true;
 }
 
 /**
@@ -967,9 +983,104 @@ function reverseSyncToEditor(point) {
         showToast('Posição não encontrada no código', 'info');
         return;
     }
+    // Longe de qualquer texto (figura, espaço em branco): a linha mais próxima
+    // costuma ser onde o LaTeX soltou a figura (ex.: \end{document}), sem utilidade
+    const maxDistance = 40 * 65536 / (currentSynctexData.unit || 1);
+    if (result.distance > maxDistance) {
+        showToast('Não há texto neste ponto do PDF (figura ou espaço em branco). Dê dois cliques sobre o texto ou a legenda.', 'info');
+        return;
+    }
+    showSourceLine(result);
+}
+
+/** Vai para a linha do código de um resultado do SyncTeX ({ file, line }). */
+function showSourceLine(result) {
+    // O trecho veio de um arquivo gerado ou de fora do projeto: a linha dele não
+    // é uma linha do .tex aberto
+    if (!projectFiles[result.file]) {
+        const bibliography = /\.bbl$/i.test(result.file) ? findBibliographyCommand() : null;
+        if (bibliography) {
+            goToLine(bibliography.line, bibliography.file, { flash: true });
+            showToast('Esse trecho é a lista de referências, gerada a partir do arquivo .bib', 'info');
+        } else {
+            showToast(`Esse trecho vem de um arquivo fora do projeto (${result.file.split('/').pop()})`, 'info');
+        }
+        return;
+    }
 
     // Vai para a linha no editor (trocando de arquivo se for outro do projeto)
-    goToLine(result.line, projectFiles[result.file] ? result.file : currentFile);
+    goToLine(result.line, result.file, { flash: true });
+}
+
+/** Linha do \bibliography / \printbibliography, de preferência no arquivo principal. */
+function findBibliographyCommand() {
+    const files = currentFiles();
+    const order = [mainFile, ...Object.keys(files).filter(p => p !== mainFile && /\.tex$/i.test(p))];
+    for (const path of order) {
+        const content = files[path]?.content;
+        if (typeof content !== 'string') continue;
+        const lines = content.split('\n');
+        const index = lines.findIndex(l => /^[^%]*\\(?:bibliography|printbibliography)\b/.test(l));
+        if (index >= 0) return { file: path, line: index + 1 };
+    }
+    return null;
+}
+
+/** Seta "código -> PDF" do divisor: mostra no PDF a linha onde está o cursor. */
+function syncCursorToPdf() {
+    if (!currentSynctexData || !pdfViewer.numPages) {
+        showToast('Compile o documento para usar a sincronização', 'warning');
+        return;
+    }
+    if (forwardSyncToPdf(editor.cursorLine()) === false) {
+        showToast('Esta linha não aparece no PDF (por exemplo, preâmbulo ou comentário). Coloque o cursor no texto do documento.', 'info');
+    }
+}
+
+/**
+ * Seta "PDF -> código" do divisor: mostra no código o trecho do PDF clicado por
+ * último ou, se ele já saiu da tela, o trecho que está sendo lido.
+ */
+function syncPdfToCode() {
+    if (!currentSynctexData || !pdfViewer.numPages) {
+        showToast('Compile o documento para usar a sincronização', 'warning');
+        return;
+    }
+    if (lastPdfPoint && pdfViewer.isPointVisible(lastPdfPoint)) {
+        reverseSyncToEditor(lastPdfPoint);
+        return;
+    }
+    const reading = pdfViewer.readingPoint();
+    const line = reading && textLineNear(reading);
+    if (line) showSourceLine(line);
+    else showToast('Não há texto nesta parte do PDF', 'info');
+}
+
+/**
+ * Linha de texto da página mais próxima (na vertical) do ponto de leitura.
+ * Considera só linhas de verdade: caixas com pelo menos 50 pt de largura e no
+ * máximo ~3 linhas de altura; figuras e marcas pequenas não têm linha útil.
+ */
+function textLineNear(point) {
+    const page = currentSynctexData.pages.find(p => p.page === point.pageNum);
+    if (!page) return null;
+    const pt = 65536 / (currentSynctexData.unit || 1);
+    const target = SyncTexParser.canvasToSynctex(currentSynctexData, point.x, point.y, point.height, point.scale);
+    let row = null;
+    let rowDistance = Infinity;
+    for (const block of page.blocks) {
+        if (block.type !== 'hbox' || !(block.line > 0)) continue;
+        if ((block.width || 0) < 50 * pt || (block.height || 0) > 40 * pt) continue;
+        const distance = Math.abs(block.v - target.y);
+        if (distance < rowDistance) {
+            rowDistance = distance;
+            row = block;
+        }
+    }
+    if (!row) return null;
+    // A linha certa está nas palavras da linha, não na caixa (ver nodeInRow)
+    const node = SyncTexParser.nodeInRow(page, row, row.h + (row.width || 0) / 2) || row;
+    return { file: node.file || 'main.tex', line: node.line };
 }
 
 // ========== FERRAMENTAS DE ESCRITA ==========

@@ -5,10 +5,11 @@
  * e a posição do cursor de cada arquivo são preservados ao trocar de arquivo.
  * As cores vêm de variáveis CSS (--ed-*), definidas pelo tema claro/escuro.
  */
-import { EditorState, Compartment, EditorSelection, Prec } from '@codemirror/state';
+import { EditorState, Compartment, EditorSelection, Prec, StateEffect, StateField } from '@codemirror/state';
 import {
     EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
     highlightSpecialChars, drawSelection, dropCursor, rectangularSelection, crosshairCursor,
+    Decoration,
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { searchKeymap, highlightSelectionMatches, openSearchPanel } from '@codemirror/search';
@@ -106,6 +107,24 @@ const baseTheme = EditorView.theme({
     },
 });
 
+// Destaque breve da linha encontrada pela sincronização com o PDF
+const setSyncFlash = StateEffect.define();
+const syncFlashField = StateField.define({
+    create: () => Decoration.none,
+    update(value, tr) {
+        value = value.map(tr.changes);
+        for (const effect of tr.effects) {
+            if (effect.is(setSyncFlash)) {
+                value = effect.value === null
+                    ? Decoration.none
+                    : Decoration.set([Decoration.line({ class: 'cm-sync-flash' }).range(effect.value)]);
+            }
+        }
+        return value;
+    },
+    provide: (field) => EditorView.decorations.from(field),
+});
+
 export function createEditor(parent, { onChange, onDoubleClick, onPasteImage, keys = [] } = {}) {
     const states = new Map(); // caminho -> EditorState
     const language = new Compartment();
@@ -114,6 +133,7 @@ export function createEditor(parent, { onChange, onDoubleClick, onPasteImage, ke
     let extrasConfig = [];
     let currentPath = null;
     let completionConfig = autocompletion();
+    let flashTimer = null;
 
     const extensions = [
         lineNumbers(),
@@ -137,6 +157,7 @@ export function createEditor(parent, { onChange, onDoubleClick, onPasteImage, ke
         highlightActiveLine(),
         highlightSelectionMatches(),
         lintGutter(),
+        syncFlashField,
         language.of(StreamLanguage.define(stex)),
         EditorView.lineWrapping,
         baseTheme,
@@ -229,14 +250,18 @@ export function createEditor(parent, { onChange, onDoubleClick, onPasteImage, ke
             return cursorLine();
         },
 
-        goToLine(lineNumber) {
+        /** Vai para a linha; com { flash: true }, destaca a linha por um instante. */
+        goToLine(lineNumber, { flash = false } = {}) {
             const doc = view.state.doc;
             const line = doc.line(Math.min(Math.max(1, lineNumber), doc.lines));
-            view.dispatch({
-                selection: { anchor: line.from },
-                effects: EditorView.scrollIntoView(line.from, { y: 'center' }),
-            });
+            const effects = [EditorView.scrollIntoView(line.from, { y: 'center' })];
+            if (flash) effects.push(setSyncFlash.of(line.from));
+            view.dispatch({ selection: { anchor: line.from }, effects });
             view.focus();
+            if (flash) {
+                clearTimeout(flashTimer);
+                flashTimer = setTimeout(() => view.dispatch({ effects: setSyncFlash.of(null) }), 1500);
+            }
         },
 
         /**

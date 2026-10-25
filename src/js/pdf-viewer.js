@@ -16,7 +16,7 @@ const SIDE_PADDING = 40;   // px de folga no "ajustar à largura"
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 5;
 
-export function createPdfViewer({ container, pagesEl, placeholderEl, onZoomChange, onPageClick }) {
+export function createPdfViewer({ container, pagesEl, placeholderEl, onZoomChange, onPageClick, onPageDoubleClick }) {
     let doc = null;
     let pages = [];          // { num, wrapper, canvas, baseWidth, baseHeight, renderTask, renderedScale }
     let scale = 1;
@@ -36,7 +36,7 @@ export function createPdfViewer({ container, pagesEl, placeholderEl, onZoomChang
         if (!pages.length) return null;
         const top = container.scrollTop;
         for (const page of pages) {
-            const start = page.wrapper.offsetTop;
+            const start = pageTop(page);
             const end = start + page.wrapper.offsetHeight;
             if (end > top) {
                 return { num: page.num, fraction: Math.max(0, (top - start) / page.wrapper.offsetHeight) };
@@ -45,10 +45,18 @@ export function createPdfViewer({ container, pagesEl, placeholderEl, onZoomChang
         return { num: pages[pages.length - 1].num, fraction: 0 };
     }
 
+    /**
+     * Topo da página dentro da área de rolagem do PDF. O offsetTop sozinho é
+     * medido a partir da janela (o contêiner não é posicionado).
+     */
+    function pageTop(page) {
+        return page.wrapper.offsetTop - container.offsetTop;
+    }
+
     function restoreAnchor(anchor) {
         if (!anchor) return;
         const page = pages[Math.min(anchor.num, pages.length) - 1];
-        if (page) container.scrollTop = page.wrapper.offsetTop + anchor.fraction * page.wrapper.offsetHeight;
+        if (page) container.scrollTop = pageTop(page) + anchor.fraction * page.wrapper.offsetHeight;
     }
 
     function sizeWrapper(page) {
@@ -146,18 +154,30 @@ export function createPdfViewer({ container, pagesEl, placeholderEl, onZoomChang
         setZoom(scale * (event.deltaY < 0 ? 1.1 : 1 / 1.1));
     }, { passive: false });
 
-    container.addEventListener('click', (event) => {
-        if (!onPageClick) return;
+    /** Ponto do clique dentro da página (pixels CSS), ou null fora das páginas. */
+    function pointFromEvent(event) {
         const wrapper = event.target.closest('.pdf-page-wrapper');
-        if (!wrapper) return;
+        if (!wrapper) return null;
         const rect = wrapper.getBoundingClientRect();
-        onPageClick(event, {
+        return {
             pageNum: Number(wrapper.dataset.pageNum),
             x: event.clientX - rect.left,
             y: event.clientY - rect.top,
             height: rect.height,
             scale,
-        });
+        };
+    }
+
+    container.addEventListener('click', (event) => {
+        const point = onPageClick && pointFromEvent(event);
+        if (point) onPageClick(event, point);
+    });
+
+    container.addEventListener('dblclick', (event) => {
+        const point = onPageDoubleClick && pointFromEvent(event);
+        if (!point) return;
+        event.preventDefault();
+        onPageDoubleClick(event, point);
     });
 
     function setZoom(newScale) {
@@ -240,9 +260,38 @@ export function createPdfViewer({ container, pagesEl, placeholderEl, onZoomChang
             const page = pages[pageNum - 1];
             if (!page) return;
             container.scrollTo({
-                top: Math.max(0, page.wrapper.offsetTop + y - container.clientHeight / 3),
+                top: Math.max(0, pageTop(page) + y - container.clientHeight / 3),
                 behavior: 'smooth',
             });
+        },
+
+        /** O ponto (de um clique anterior) ainda está na área visível do PDF? */
+        isPointVisible(point) {
+            const page = pages[point.pageNum - 1];
+            if (!page || point.scale !== scale) return false;
+            const top = pageTop(page) + point.y;
+            return top >= container.scrollTop && top <= container.scrollTop + container.clientHeight;
+        },
+
+        /**
+         * Ponto que está sendo lido: um terço abaixo do topo da área visível
+         * (a mesma altura em que o scrollTo deixa o resultado do SyncTeX).
+         */
+        readingPoint() {
+            if (!pages.length) return null;
+            const target = container.scrollTop + container.clientHeight / 3;
+            const page = pages.find(p => pageTop(p) + p.wrapper.offsetHeight >= target) || pages[pages.length - 1];
+            const height = page.wrapper.offsetHeight;
+            return {
+                pageNum: page.num,
+                // 30% da largura: dentro do texto em uma ou duas colunas (o meio
+                // cai no espaço entre colunas, onde só a página inteira contém o ponto)
+                x: page.wrapper.offsetWidth * 0.3,
+                y: Math.min(Math.max(0, target - pageTop(page)), height),
+                width: page.wrapper.offsetWidth,
+                height,
+                scale,
+            };
         },
 
         /** Destaca brevemente um ponto da página (resultado do SyncTeX). */

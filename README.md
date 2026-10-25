@@ -36,8 +36,11 @@ projetos e gera o PDF localmente.
   para instalar com um clique (via `tlmgr`; busca e instalação precisam de internet).
 - **PDF rápido:** só as páginas visíveis são desenhadas, a posição de leitura é
   mantida ao recompilar, zoom e ajuste à largura.
-- **SyncTeX:** duplo clique no código mostra o trecho no PDF; Ctrl+clique no
-  PDF leva à linha.
+- **Código ↔ PDF (SyncTeX):** duplo clique no código mostra o trecho no PDF, e
+  duplo clique no PDF leva à linha do código (destacada por um instante). As
+  setas no divisor fazem o mesmo: → mostra no PDF a linha do cursor, ← mostra no
+  código o trecho clicado ou lido no PDF. Funciona com vários arquivos
+  (`\input`) e leva as referências ao `\bibliography`.
 - **Sumário e contagem de palavras:** seções, figuras e tabelas de todos os
   arquivos; contagem por seção com o texcount.
 - **Corretor ortográfico em português e inglês** offline (dicionários VERO e

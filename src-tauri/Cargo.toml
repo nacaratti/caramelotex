@@ -1,6 +1,6 @@
 [package]
 name = "caramelotex"
-version = "0.3.3"
+version = "0.3.4"
 description = "Editor LaTeX offline"
 authors = ["Davi Pontes Nacaratti"]
 license = "MIT"

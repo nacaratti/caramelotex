@@ -115,7 +115,24 @@
             <div id="editor" class="flex-1 min-h-0 overflow-hidden"></div>
         </section>
 
-        <div id="resizer"></div>
+        <div id="resizer">
+            <div class="sync-arrows" role="group" aria-label="Sincronizar código e PDF">
+                <button id="syncToPdfBtn" class="sync-arrow" type="button"
+                    title="Mostrar no PDF a linha do cursor (ou dê dois cliques no código)">
+                    <svg fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M5 12h14m-6-6 6 6-6 6" />
+                    </svg>
+                    <span class="sr-only">Mostrar no PDF</span>
+                </button>
+                <button id="syncToCodeBtn" class="sync-arrow" type="button"
+                    title="Mostrar no código o trecho do PDF (ou dê dois cliques no PDF)">
+                    <svg fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M19 12H5m6-6-6 6 6 6" />
+                    </svg>
+                    <span class="sr-only">Mostrar no código</span>
+                </button>
+            </div>
+        </div>
 
         <!-- PDF -->
         <section id="viewerPanel" class="w-1/2 flex flex-col min-w-[300px] bg-pdf">
