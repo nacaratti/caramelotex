@@ -616,7 +616,7 @@ section h2 {
 
 .timeline > li {
     position: relative;
-    padding: 0 0 2rem 1.75rem;
+    padding: 0 0 1.1rem 1.75rem;
 }
 
 .timeline > li:last-child {
@@ -643,8 +643,68 @@ section h2 {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: 0.25rem 0.75rem;
-    margin: 0 0 0.35rem;
+    gap: 0.15rem 0.75rem;
+    margin: 0;
+}
+
+/* Cada versão abre e fecha (details/summary); só a mais recente vem aberta */
+summary.version {
+    cursor: pointer;
+    list-style: none;
+    padding-right: 1.75rem;
+    position: relative;
+}
+
+summary.version::-webkit-details-marker {
+    display: none;
+}
+
+summary.version::after {
+    content: '';
+    position: absolute;
+    right: 0.25rem;
+    top: 0.55rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 2px solid var(--contorno);
+    border-bottom: 2px solid var(--contorno);
+    transform: rotate(45deg);
+    transition: transform 0.15s ease;
+}
+
+details[open] > summary.version::after {
+    transform: rotate(-135deg);
+    top: 0.8rem;
+}
+
+summary.version:hover strong {
+    color: var(--verde-escuro);
+}
+
+/* Resumo de uma linha: aparece só com a versão fechada */
+.version em {
+    flex-basis: 100%;
+    font-style: normal;
+    font-size: 1rem;
+    color: var(--contorno);
+    opacity: 0.85;
+}
+
+details[open] > summary.version em {
+    display: none;
+}
+
+.timeline details > ul {
+    margin-top: 0.4rem;
+}
+
+.all-versions {
+    margin: 1.25rem 0 0;
+    font-size: 1rem;
+}
+
+.all-versions a {
+    margin-left: 0.4rem;
 }
 
 .version strong {
